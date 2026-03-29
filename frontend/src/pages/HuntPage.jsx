@@ -71,15 +71,25 @@ export default function HuntPage({ setResult, loadHistory }) {
 
   const handleOpenHenull = async () => {
     setHenullStarting(true);
+    // Mở tab blank NGAY LẬP TỨC khi user click (trước await) để tránh bị popup blocker chặn.
+    // Sau khi fetch xong sẽ navigate tab đó đến novnc_url.
+    const newTab = window.open("about:blank", "_blank");
     try {
       const res = await fetch(`${API_BASE}/api/open_henull`, { method: "POST" });
       if (res.ok) {
         const data = await res.json();
-        if (data.novnc_url) window.open(data.novnc_url, "_blank");
+        if (data.novnc_url && newTab) {
+          newTab.location.href = data.novnc_url;
+        } else if (newTab && !data.novnc_url) {
+          newTab.close(); // không có URL thì đóng tab trắng
+        }
         setHenullOverlayVisible(true);
         setHenullOverlayMode("instructions");
+      } else {
+        if (newTab) newTab.close();
       }
     } catch (_) {
+      if (newTab) newTab.close();
     } finally {
       setHenullStarting(false);
     }
