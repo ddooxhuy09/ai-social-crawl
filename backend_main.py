@@ -146,5 +146,14 @@ if _frontend_dist:
         )
 
 
+## Catch-all route cho HEnull Proxy (để xử lý các file assets /_app/..., /_henull/...)
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
+async def catch_all_proxy(path: str, request: Request):
+    # Nếu path bắt đầu bằng api/ hoặc các đường dẫn tĩnh đã biết thì bỏ qua (lẽ ra đã được match ở trên)
+    # Nhưng nếu tới đây nghĩa là không match route nào cả -> forward tới henull proxy main
+    from etsy_hunt.router import henull_proxy
+    return await henull_proxy("main", path, request)
+
+
 # Run with:
 #   uvicorn backend_main:app --reload --port 8000

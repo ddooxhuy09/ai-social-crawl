@@ -201,11 +201,21 @@ async def henull_proxy(target: str, path: str, request: Request):
                     v = v.replace(orig, proxy)
             resp_headers[k] = v
         elif kl == "set-cookie":
+            # Gỡ bỏ Domain và Secure để trình duyệt chấp nhận Cookie trên IP VPS
             v = re.sub(r";\s*Domain=[^;,]+", "", v, flags=re.IGNORECASE)
             v = re.sub(r";\s*Secure(?=;|,|$)", "", v, flags=re.IGNORECASE)
-            v = re.sub(r";\s*SameSite=[^;,]+", "; SameSite=Lax", v, flags=re.IGNORECASE)
+            # Ép SameSite=Lax để Session hoạt động tốt trong Iframe
+            if "SameSite=" in v:
+                v = re.sub(r";\s*SameSite=[^;,]+", "; SameSite=Lax", v, flags=re.IGNORECASE)
+            else:
+                v += "; SameSite=Lax"
             resp_headers[k] = v
         else: resp_headers[k] = v
+
+    # Thêm CORS headers để tránh bị trình duyệt chặn các request AJAX từ HEnull
+    resp_headers["Access-Control-Allow-Origin"] = "*"
+    resp_headers["Access-Control-Allow-Methods"] = "*"
+    resp_headers["Access-Control-Allow-Headers"] = "*"
 
     # Content rewrite
     ct = resp.headers.get("content-type", "").lower()
