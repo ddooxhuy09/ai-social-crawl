@@ -1,0 +1,101 @@
+[
+    {
+        "id": "req1_keyword_filter",
+        "prompt": {
+            "role": "Etsy SEO expert",
+            "task": "You are helping optimize a new listing for a product described as '{seed_keyword}'. Review the following list of high-scoring Etsy keywords. Your task is to extract highly relevant, long-tail keywords (typically 2 or more words).",
+            "rules": [
+                "Filter out single-word generic terms, irrelevant attributes, and competitor brand names.",
+                "STRICTLY remove any duplicate concepts or slight plural variations (e.g., if you choose 'baby headband', do not include 'baby headbands').",
+                "You MUST actively extract a robust list and return approximately 50 completely unique, highly relevant keywords that strongly match the seed context.",
+                "Return the filtered keywords as a strict JSON array of strings: [\"keyword 1\", \"keyword 2\"]. Do not provide any other formatting or explanation."
+            ]
+        }
+    },
+    {
+        "id": "req2_title_generator",
+        "prompt": {
+            "role": "Expert Etsy SEO Listing Copywriter",
+            "task": "Generate exactly 5 highly-optimized Etsy product titles for '{seed_keyword}' based on the AI-filtered keywords and User Features below. You must perfectly balance SEO searchability with human readability for this specific niche.\n\nSeed Keyword: {seed_keyword}\n\nKeywords context:\n{ai_keywords}\n\nCustom User Features to include:\n{custom_attributes}",
+            "rules": [
+                "MAXIMUM LENGTH: Strictly under 140 Characters (including spaces). You MUST count characters before finalizing.",
+                "DYNAMIC FORMULA: Primary Keyword (Material/Type) + Variation Keyword + Feature + Style/Theme + Purpose/Recipient. If a component (like 'Style' or 'Purpose') does not logically apply to this specific product, omit it naturally.",
+                "PLACEMENT: The most descriptive primary attributes (e.g., core material, main color, exact product type) MUST be at the very beginning of the title.",
+                "SYNTAX: Use commas (, ) to cleanly separate keyword phrases.",
+                "LOGICAL READABILITY: Must read naturally. STRICTLY DO NOT combine conflicting materials, incompatible styles, or illogical concepts (e.g., do not mix 'minimalist' with 'boho' unless requested).",
+                "CONCISENESS: Use fewer than 15 words to seamlessly integrate the special features (custom attributes).",
+                "HOLIDAYS/OCCASIONS: Only include holidays, seasons, or specific recipients if explicitly requested in the Custom Features or if strongly implied by the '{seed_keyword}'.",
+                "NO STUFFING: Do not awkwardly stuff the exact same words or concepts multiple times.",
+                "NO SUBJECTIVES: STRICTLY FORBIDDEN to use subjective marketing adjectives (e.g., 'perfect', 'beautiful', 'cute', 'unique', 'fancy', 'stunning'). Describe what it is, not how it looks.",
+                "OUTPUT FORMAT: Return a STRICT JSON array containing exactly 5 string elements representing the 5 title options: [\"Title 1\", \"Title 2\", etc]. Do not output any markdown formatting or extra text outside the JSON array."
+            ]
+        }
+    },
+    {
+        "id": "req3_tag_generator",
+        "prompt": {
+            "role": "Expert Etsy SEO Tag Strategist",
+            "task": "Generate the optimal set of {tag_count} Etsy tags for the product below.\n\nSeed Keyword: {seed_keyword}\nListing Title: {listing_title}\nCustom Attributes: {custom_attributes}\n\nHigh-score tags from REQ1 (Use the best ones, but modify if needed to fit character limits): \n{ai_keywords}\n\nTags already used/selected (STRICTLY avoid repeating these exact phrases):\n{base_tags}",
+            "rules": [
+                "EXACT COUNT: Return exactly {tag_count} tags as a STRICT JSON array of strings.",
+                "CHARACTER LIMIT (CRITICAL): Every single tag MUST be 20 characters or less (including spaces). Do not output any tag longer than 20 characters.",
+                "FORMAT: Each tag must be a long-tail phrase, usually 2-3 words. Never use full sentences.",
+                "WORD DIVERSITY: Do not repeat the exact same individual word in more than 3 different tags. Force broad synonym usage (e.g., if you use 'headband' 3 times, switch to 'hairwrap', 'bow', 'accessory', etc.).",
+                "BROAD ANGLES: Diversify the context. Think outside just describing the product. Include angles like: material, recipient, occasion, style/aesthetic, technique, or specific use cases.",
+                "EXCLUSIONS: Avoid brand names, generic filler words, and vague adjectives (e.g., 'beautiful', 'nice') without specific product meaning.",
+                "OUTPUT: Do not output markdown, numbering, explanations, or any extra text outside the JSON array."
+            ]
+        }
+    },
+    {
+        "id": "req4_description_generator",
+        "prompt": {
+            "role": "Expert Etsy SEO Product Description Copywriter",
+            "task": "Create a clear Etsy listing description from the product data below.\n\nSeed Keyword: {seed_keyword}\nListing Title: {listing_title}\nMaterials & Skill Level Input: {materials_skill_level}\nFinished Sizes Input: {finished_sizes}\nStory Ideas Input: {story_ideas}\nShop Link Input: {shop_link}\n\nREQ1 keyword context:\n{ai_keywords}\n\nREQ3 tags context:\n{req3_tags}",
+            "rules": [
+                "You MUST preserve the user's factual inputs. Do not invent materials, sizes, terminology, or skill level details that are not supported by the inputs or obvious product context.",
+                "Naturally weave in relevant REQ1 keywords for Etsy SEO, but do not keyword-stuff or repeat the same phrase unnaturally.",
+                "Return a STRICT JSON object with exactly these keys: \"digital_notice_lines\", \"materials_skill_level_lines\", \"finished_sizes_lines\", \"brand_story_paragraph\", \"copyright_lines\".",
+                "\"digital_notice_lines\" must be an array of 2-4 concise lines suitable for the Digital Notice section.",
+                "\"materials_skill_level_lines\" must be an array of concise bullet-ready lines for the Materials & Skill Level section.",
+                "\"finished_sizes_lines\" must be an array of concise bullet-ready lines for the Finished Sizes section.",
+                "\"brand_story_paragraph\" must be a single readable paragraph.",
+                "\"copyright_lines\" must be an array of concise bullet-ready lines for allowed usage, copyright, and support notes.",
+                "Do not output markdown code fences, headings, numbering, or any extra text outside the JSON object."
+            ]
+        }
+    },
+    {
+        "id": "req4_pattern_extractor",
+        "prompt": {
+            "role": "Expert at reading handmade product pattern documents (crochet, knitting, sewing, embroidery, etc.)",
+            "task": "Extract the following information from the document chunk below. This may be a partial section of a larger document.\n\nDocument chunk:\n{text_chunk}",
+            "rules": [
+                "Return ONLY a strict JSON object with exactly these keys: \"listing_title\", \"materials_skill_level\", \"finished_sizes\", \"story_ideas\".",
+                "\"listing_title\": The product title suitable for an Etsy listing (e.g. 'Thick Crochet Baby Headband PDF Pattern, Ribbed, Stretchy, Quick Project, 8 Sizes Newborn to Adult'). Return empty string if not found in this chunk.",
+                "\"materials_skill_level\": Skill level and all materials/tools mentioned (e.g. 'Advanced Beginner, Worsted weight (#4) yarn, 6mm hook, stitch markers, yarn needle'). Return empty string if not found.",
+                "\"finished_sizes\": All finished size measurements listed (e.g. 'Newborn - 13in, 0-3 months - 14in, 3-6 months - 15in'). Return empty string if not found.",
+                "\"story_ideas\": Key selling points, intended audience, or product story (e.g. 'Designed for mothers who want a relaxing handmade gift, quick weekend project, customizable colors'). Return empty string if not found.",
+                "Do NOT include shop links or copyright text in any field.",
+                "Return ONLY the JSON object, no explanation, no markdown fences."
+            ]
+        }
+    },
+    {
+        "id": "req5_alt_text_generator",
+        "prompt": {
+            "role": "Expert Etsy Image SEO Strategist",
+            "task": "Analyze the uploaded product image named '{filename}' for the listing seed '{seed_keyword}'. Choose the single best long-tail keyword from the REQ1 list below, then write one SEO alt text for this exact image.\n\nREQ1 keyword options:\n{ai_keywords}\n\nKeywords already used for other uploaded images:\n{used_keywords}",
+            "rules": [
+                "Return a STRICT JSON object with exactly these keys: \"keyword_used\" and \"alt_text\".",
+                "\"keyword_used\" must exactly match one keyword from the provided REQ1 keyword list.",
+                "\"alt_text\" must describe what is visually in the uploaded image and must include the chosen keyword naturally.",
+                "\"alt_text\" must be lowercase and use hyphens between words.",
+                "Do NOT use phrases like \"image-of\", \"picture-of\", or \"photo-of\".",
+                "Do not mention camera language, backgrounds, or decorative details unless they are clearly important in the image.",
+                "Keep the alt text concise, specific, readable, and suitable for Etsy SEO.",
+                "Do not output markdown, explanations, or extra text outside the JSON object."
+            ]
+        }
+    }
+]

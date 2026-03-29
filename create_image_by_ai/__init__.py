@@ -1,0 +1,1 @@
+from create_image_by_ai.image_generator import generate_images

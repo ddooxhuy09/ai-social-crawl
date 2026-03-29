@@ -1,0 +1,317 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { API_BASE, SORT_OPTIONS } from "../constants";
+import PinCard from "../components/PinCard";
+import ImageDropzone from "../components/ImageDropzone";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Select } from "../components/ui/select";
+import { Label } from "../components/ui/label";
+import { LoadingOverlay } from "../components/ui/loading-overlay";
+
+function HistoryRow({ item, onLoad, onDownload, onDelete }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-2 flex flex-col gap-1.5">
+      <button type="button" onClick={() => onLoad(item.id)} className="text-left w-full cursor-pointer">
+        <p className="text-[0.72rem] font-semibold text-gray-900 leading-snug truncate">
+          {item.keyword} ({item.total})
+        </p>
+        <p className="text-[0.65rem] text-gray-400">{item.created_at?.slice(0, 16).replace("T", " ")}</p>
+      </button>
+      <div className="flex gap-1.5">
+        <button type="button" onClick={() => onDownload(item)}
+          className="text-[0.68rem] px-2 py-0.5 rounded border border-sky-200 bg-sky-50 text-sky-600 hover:bg-sky-100 cursor-pointer transition-colors">
+          Tải CSV
+        </button>
+        <button type="button" onClick={() => onDelete(item)}
+          className="text-[0.68rem] px-2 py-0.5 rounded border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 cursor-pointer transition-colors">
+          Xóa
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function PinterestImagePage({ history, loadHistory, initialHistoryId, onInitConsumed }) {
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [cookieString, setCookieString] = useState("");
+  const [headless] = useState(true);
+  const [scrollRounds, setScrollRounds] = useState(2);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+  const [filterText, setFilterText] = useState("");
+  const [sortBy, setSortBy] = useState("default");
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/pinterest/default_cookie`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.cookie_string) setCookieString(data.cookie_string); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!initialHistoryId) return;
+    loadHistoryDetail(initialHistoryId);
+    onInitConsumed?.();
+  }, [initialHistoryId]); // eslint-disable-line
+
+  const handleFile = (f) => {
+    setImageFile(f);
+    setImagePreview(URL.createObjectURL(f));
+    setError("");
+    setResult(null);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!imageFile) { setError("Vui lòng chọn ảnh."); return; }
+    if (!cookieString.trim()) { setError("Cookie Pinterest chưa được load. Vui lòng restart backend."); return; }
+    setLoading(true);
+    setError("");
+    setResult(null);
+    const form = new FormData();
+    form.append("file", imageFile);
+    form.append("cookie_string", cookieString);
+    form.append("headless", headless ? "true" : "false");
+    form.append("scroll_rounds", String(scrollRounds));
+    try {
+      const res = await fetch(`${API_BASE}/api/pinterest/upload_and_search`, { method: "POST", body: form });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `Lỗi ${res.status}`);
+      }
+      setResult(await res.json());
+      await loadHistory();
+    } catch (err) {
+      setError(err.message || "Lỗi không xác định.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadHistoryDetail = async (id) => {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/history/${id}`);
+      if (!res.ok) throw new Error(`Lỗi tải lịch sử: ${res.status}`);
+      setResult(await res.json());
+    } catch (err) {
+      setError(err.message || "Không tải được lịch sử.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadHistoryCsv = async (item) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/history/${item.id}/download`);
+      if (!res.ok) throw new Error("Tải CSV thất bại.");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pins_${(item.keyword || "data").replace(/[^a-zA-Z0-9_-]/g, "_")}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message || "Không tải được CSV.");
+    }
+  };
+
+  const deleteHistory = async (item) => {
+    if (!window.confirm(`Xóa lịch sử "${item.keyword}"?`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/history/${item.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Xóa lịch sử thất bại.");
+      await loadHistory();
+    } catch (err) {
+      setError(err.message || "Không xóa được lịch sử.");
+    }
+  };
+
+  const pins = result?.similar_pins || result?.pins || [];
+
+  const displayPins = useMemo(() => {
+    if (!pins.length) return [];
+    let list = [...pins];
+    const q = (filterText || "").trim().toLowerCase();
+    if (q) list = list.filter((p) =>
+      (p.title || "").toLowerCase().includes(q) || (p.description || "").toLowerCase().includes(q)
+    );
+    const num = (v) => (typeof v === "number" ? v : parseInt(v, 10) || 0);
+    if (sortBy !== "default") {
+      list.sort((a, b) => {
+        switch (sortBy) {
+          case "title_asc": return (a.title || "").localeCompare(b.title || "");
+          case "title_desc": return (b.title || "").localeCompare(a.title || "");
+          case "likes_desc": return num(b.like_count) - num(a.like_count);
+          case "likes_asc": return num(a.like_count) - num(b.like_count);
+          case "reactions_desc": return num(b.reaction_count) - num(a.reaction_count);
+          case "reactions_asc": return num(a.reaction_count) - num(b.reaction_count);
+          case "saves_desc": return num(b.save_count) - num(a.save_count);
+          case "repins_desc": return num(b.repin_count) - num(a.repin_count);
+          case "comments_desc": return num(b.comment_count) - num(a.comment_count);
+          default: return 0;
+        }
+      });
+    }
+    return list;
+  }, [pins, filterText, sortBy]);
+
+  const imageHistory = (history || []).filter(h => h.id.includes("image_upload") || h.keyword?.startsWith("image_upload"));
+
+  return (
+    <>
+      {loading && (
+        <LoadingOverlay title="Đang xử lý..." subtitle="Upload ảnh và tìm pin tương tự, khoảng 30–60 giây." />
+      )}
+
+      <div className="flex gap-4 h-full overflow-hidden p-4">
+        {/* Left panel: form + history */}
+        <div className="w-64 shrink-0 flex flex-col gap-3 overflow-hidden">
+          <p className="font-semibold text-sm text-gray-900">Tìm pin tương tự</p>
+
+          {/* Image dropzone */}
+          <ImageDropzone
+            file={imageFile}
+            preview={imagePreview}
+            onChange={handleFile}
+            style={{ aspectRatio: "3/4", minHeight: 160, maxHeight: 220 }}
+            className="shrink-0"
+          />
+
+          {/* Scroll rounds */}
+          <div className="flex items-center gap-2 shrink-0">
+            <label className="text-xs text-gray-600 whitespace-nowrap">Số trang kết quả</label>
+            <input
+              type="number" min={1} max={10} value={scrollRounds}
+              onChange={(e) => setScrollRounds(Math.max(1, Math.min(10, Number(e.target.value))))}
+              className="w-16 border border-gray-300 rounded px-2 py-0.5 text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#e60023]"
+            />
+            <span className="text-xs text-gray-400">~{scrollRounds * 25} pin</span>
+          </div>
+
+          {error && (
+            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 shrink-0">
+              {error}
+            </div>
+          )}
+
+          <Button variant="pinterest" onClick={handleSubmit} disabled={loading} className="w-full shrink-0">
+            📌 Upload & Tìm pin tương tự
+          </Button>
+
+          {/* History button */}
+          <Button variant="outline" className="w-full shrink-0" onClick={() => setHistoryModalOpen(true)}>
+            📂 Lịch sử
+            {imageHistory.length > 0 && (
+              <span className="ml-1.5 text-xs text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">{imageHistory.length}</span>
+            )}
+          </Button>
+        </div>
+
+        {/* Right panel: results */}
+        <div className="flex-1 overflow-y-auto min-w-0">
+          {result && (
+            <div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-3 text-sm">
+                {result.pin_id ? (
+                  <>
+                    <p className="font-bold text-emerald-700 mb-1">✅ Pin đã tạo thành công!</p>
+                    <p className="text-gray-700">ID: <strong>{result.pin_id}</strong></p>
+                    <a href={result.pin_url} target="_blank" rel="noreferrer"
+                      className="text-[#e60023] font-semibold break-all hover:underline text-xs">
+                      {result.pin_url}
+                    </a>
+                  </>
+                ) : (
+                  <p className="font-bold text-emerald-700">📌 Lịch sử: {result.keyword}</p>
+                )}
+                <p className="text-gray-600 mt-1">Tổng: <strong>{pins.length}</strong> pin tương tự</p>
+              </div>
+
+              {pins.length > 0 && (
+                <>
+                  {/* Filter bar */}
+                  <div className="flex flex-wrap gap-3 items-center mb-3">
+                    <div className="min-w-[190px] flex-1">
+                      <Label htmlFor="img-filter-pins">Lọc theo tên / mô tả</Label>
+                      <Input id="img-filter-pins" type="text" value={filterText}
+                        onChange={(e) => setFilterText(e.target.value)} placeholder="Nhập từ khóa..." />
+                    </div>
+                    <div className="min-w-[200px]">
+                      <Label htmlFor="img-sort-pins">Sắp xếp theo</Label>
+                      <Select id="img-sort-pins" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                        {SORT_OPTIONS.filter(o => o.sources === null || o.sources.includes("pinterest"))
+                          .map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                      </Select>
+                    </div>
+                    {filterText.trim() && (
+                      <span className="text-xs text-gray-500 self-end pb-1">
+                        Hiển thị {displayPins.length} / {pins.length} pin
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Pin grid */}
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2.5 pb-4">
+                    {displayPins.map((pin, i) => (
+                      <PinCard key={pin.pin_url || i} pin={pin} />
+                    ))}
+                  </div>
+                </>
+              )}
+              {pins.length === 0 && <p className="text-gray-400 text-sm">Không có pin tương tự nào.</p>}
+            </div>
+          )}
+
+          {!result && !loading && (
+            <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-2">
+              <div className="text-5xl">📌</div>
+              <p>Upload ảnh để tìm các pin tương tự trên Pinterest</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* History modal */}
+      {historyModalOpen && (
+        <div
+          className="fixed inset-0 z-[9998] bg-black/40 flex items-center justify-center"
+          onClick={(e) => { if (e.target === e.currentTarget) setHistoryModalOpen(false); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-[520px] max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <p className="text-base font-semibold text-gray-900">Lịch sử upload ảnh</p>
+                {imageHistory.length > 0 && (
+                  <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{imageHistory.length}</span>
+                )}
+              </div>
+              <button type="button" onClick={() => setHistoryModalOpen(false)}
+                className="text-gray-400 hover:text-gray-700 text-lg leading-none cursor-pointer px-1">✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4">
+              {imageHistory.length === 0 ? (
+                <p className="text-xs text-gray-400 py-4 text-center">Chưa có lịch sử nào.</p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {imageHistory.map((item) => (
+                    <HistoryRow key={item.id} item={item}
+                      onLoad={(id) => { loadHistoryDetail(id); setHistoryModalOpen(false); }}
+                      onDownload={downloadHistoryCsv}
+                      onDelete={deleteHistory}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

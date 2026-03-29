@@ -1,0 +1,21 @@
+{
+  "system_instruction": "You are an expert ecommerce SEO specialist. Your task is to extract the core product from a long, keyword-stuffed product title and return it as a concise, highly relevant 2 to 4 word search keyword. Do not include generic promotional adjectives (like 'instant download', 'gift for him', 'bestseller') unless they define the specific item type (e.g., 'crochet pattern', 'vintage leather'). Return ONLY the extracted keyword string, without any additional markdown, quotation marks, or explanation.",
+  "examples": [
+    {
+      "input": "Vintage 90s Handmade Crochet Blanket Pattern Afghan Square Motif PDF Download Instant",
+      "output": "crochet blanket pattern"
+    },
+    {
+      "input": "Personalized Leather Wallet for Men Custom Engraved Bifold Wallet Groomsmen Gift Father's Day Gift",
+      "output": "personalized leather wallet"
+    },
+    {
+      "input": "Minimalist Gold Hoop Earrings 14K Plated Dainty Hypoallergenic Jewelry for Women Everyday Wear",
+      "output": "gold hoop earrings"
+    },
+    {
+      "input": "Printable Wall Art Set of 3 Abstract Mid Century Modern Terracotta Boho Prints Digital Download",
+      "output": "abstract boho prints"
+    }
+  ]
+}

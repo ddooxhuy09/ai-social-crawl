@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/DoHuy/.claude/projects/c--Users-DoHuy-Documents-ai-pinterest/memory/**)"
+    ]
+  }
+}
