@@ -3,14 +3,15 @@ import csv
 import json
 import os
 import re
-import subprocess
 import sys
 import urllib.request
 import urllib.error
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
-from fastapi import APIRouter, HTTPException
+import httpx
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -80,11 +81,10 @@ def _load_prompt_template() -> str:
         data = json.loads(ETSY_HUNT_PROMPTS_FILE.read_text(encoding="utf-8"))
         return data["classify_keywords"]["prompt_template"]
     except Exception:
-        # Fallback inline prompt if file missing
         return (
             "Bạn là chuyên gia phân tích từ khóa Etsy. Phân tích từng keyword và trích xuất các thành phần NER.\n\n"
             "Trả về JSON array, mỗi phần tử:\n"
-            '{"keyword":"...","Màu sắc":"","Kích thước":"","Hoa văn":"","Khác":"","Chất liệu":"",'
+            '{"keyword":"...","Màu sắc":"","Kích thước":"","Hoa văn":"","Khác":"",'
             '"Tính năng/hiệu quả":"","Đối tượng":"","Phong cách/kiểu dáng":"","Cảnh":"",'
             '"Từ theo mùa/sự kiện đặc biệt":"","Dòng sản phẩm/mô hình bổ sung":""}\n\n'
             "Chỉ trả về JSON array, không giải thích thêm.\n\nKeywords:\n{keywords_list}"
@@ -125,35 +125,199 @@ def _classify_keywords_gemini(keywords: list) -> dict:
     return results
 
 
-# ── Routes: Open HEnull ────────────────────────────────────────────────────────
+# ── Reverse Proxy: HEnull ─────────────────────────────────────────────────────
+# Thay thế Playwright subprocess — user đăng nhập HEnull qua iframe trong tool,
+# VPS proxy bắt Authorization header và trigger crawl tự động.
 
-@router.post("/api/open_henull")
-async def open_henull(project_id: str = None) -> dict:
-    """Mở HEnull (Etsy Hunt) bằng Playwright."""
-    if getattr(sys, "frozen", False):
-        exe_dir = Path(sys.executable).parent
-        args = [sys.executable, "--run-etsy-hunt"]
-        if project_id:
-            args.extend(["--project-id", project_id])
-        cwd = str(exe_dir)
+PROXY_TARGETS = {
+    "main": "https://www.henull.com",
+    "tool": "https://lzgawl7j.realnull.com",
+}
+PROXY_URL_MAP = {v: f"/api/henull_proxy/{k}" for k, v in PROXY_TARGETS.items()}
+
+# Shared cookie jar — duy trì session HEnull giữa các requests
+_proxy_cookies: dict = {}
+
+# Inject script nhỏ gọn: rewrite fetch/XHR URLs + patch history.pushState
+_INJECT_SCRIPT_TPL = (
+    "<script>(function(){"
+    "var M={'https://www.henull.com':'/api/henull_proxy/main',"
+    "'https://lzgawl7j.realnull.com':'/api/henull_proxy/tool'};"
+    "var P='__PFX__';"
+    "function rw(u){if(!u||typeof u!=='string')return u;"
+    "for(var k in M){if(u.indexOf(k)===0)return M[k]+u.slice(k.length);}return u;}"
+    "var oF=window.fetch.bind(window);"
+    "window.fetch=function(i,n){return oF(typeof i==='string'?rw(i):i,n);};"
+    "var oO=XMLHttpRequest.prototype.open;"
+    "XMLHttpRequest.prototype.open=function(m,u){"
+    "return oO.apply(this,[m,rw(u)].concat([].slice.call(arguments,2)));};"
+    "function ph(f){return function(s,t,u){"
+    "if(u&&u[0]==='/'&&u.indexOf('/api/')!==0)u=P+u;"
+    "return f.call(this,s,t,u);};}"
+    "if(history.pushState){history.pushState=ph(history.pushState);}"
+    "if(history.replaceState){history.replaceState=ph(history.replaceState);}"
+    "})();</script>"
+)
+
+_SKIP_REQ_HEADERS = {
+    "host", "content-length", "transfer-encoding",
+    "connection", "keep-alive", "upgrade", "te",
+}
+_SKIP_RESP_HEADERS = {
+    "content-encoding", "content-length", "transfer-encoding",
+    "x-frame-options", "content-security-policy",
+    "content-security-policy-report-only", "strict-transport-security",
+}
+
+
+def _make_inject_script(prefix: str) -> str:
+    return _INJECT_SCRIPT_TPL.replace("__PFX__", prefix)
+
+
+def _rewrite_html(html: str, prefix: str) -> str:
+    """Rewrite absolute HEnull URLs in HTML + inject monkey-patch script."""
+    for orig, proxy in PROXY_URL_MAP.items():
+        html = html.replace(f'"{orig}', f'"{proxy}')
+        html = html.replace(f"'{orig}", f"'{proxy}")
+        html = html.replace(f"={orig}", f"={proxy}")
+    inject = _make_inject_script(prefix)
+    lo = html.lower()
+    if "<head>" in lo:
+        idx = lo.index("<head>") + 6
+        html = html[:idx] + inject + html[idx:]
+    elif "<body>" in lo:
+        idx = lo.index("<body>") + 6
+        html = html[:idx] + inject + html[idx:]
     else:
-        project_dir = Path(__file__).resolve().parent.parent
-        script_path = project_dir / "etsy_hunt" / "etsy_hunt.py"
-        if not script_path.exists():
-            raise HTTPException(status_code=500, detail="Không tìm thấy etsy_hunt/etsy_hunt.py.")
-        venv_python = project_dir / "social_crawl" / "Scripts" / "python.exe"
-        python_exe = str(venv_python) if venv_python.exists() else sys.executable
-        args = [python_exe, str(script_path)]
-        if project_id:
-            args.extend(["--project-id", project_id])
-        cwd = str(project_dir)
+        html = inject + html
+    return html
+
+
+async def _run_keyword_crawl_bg(orig_url: str, headers: dict, project_id: str = None) -> None:
+    """Background task: crawl p=1..100 keyword pages and save CSV."""
     try:
-        env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
-        subprocess.Popen(args, cwd=cwd, env=env)
+        from etsy_hunt.etsy_hunt_keyword import crawl_keyword_pages, save_keywords_csv
+        items = await crawl_keyword_pages(orig_url, headers, project_id)
+        if items:
+            kw = parse_qs(urlparse(orig_url).query).get("kw", ["unknown"])[0]
+            save_keywords_csv(kw, items, project_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Không mở được HEnull: {e}")
-    novnc_url = os.getenv("NOVNC_URL", "")
-    return {"status": "started", "novnc_url": novnc_url}
+        print(f"[proxy crawl] lỗi: {e}")
+
+
+@router.api_route(
+    "/api/henull_proxy/{target}/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+)
+async def henull_proxy(target: str, path: str, request: Request):
+    """Reverse proxy HEnull qua VPS — bắt Authorization header và trigger crawl."""
+    if target not in PROXY_TARGETS:
+        raise HTTPException(status_code=404, detail="Invalid proxy target")
+
+    base = PROXY_TARGETS[target]
+    target_url = f"{base}/{path}"
+    if request.url.query:
+        target_url += f"?{request.url.query}"
+
+    # Build forwarded headers
+    fwd: dict = {}
+    for k, v in request.headers.items():
+        kl = k.lower()
+        if kl in _SKIP_REQ_HEADERS:
+            continue
+        if kl == "origin":
+            fwd["origin"] = base
+        elif kl == "referer":
+            for proxy_pfx in PROXY_TARGETS:
+                pfx = f"/api/henull_proxy/{proxy_pfx}"
+                if pfx in v:
+                    v = v.replace(str(request.base_url).rstrip("/") + pfx, PROXY_TARGETS[proxy_pfx])
+                    v = v.replace(pfx, PROXY_TARGETS[proxy_pfx])
+            fwd["referer"] = v
+        else:
+            fwd[k] = v
+    fwd["host"] = base.replace("https://", "").replace("http://", "")
+
+    # Merge stored session cookies
+    if _proxy_cookies:
+        existing = fwd.get("cookie", "")
+        extra = "; ".join(f"{k}={v}" for k, v in _proxy_cookies.items())
+        fwd["cookie"] = f"{existing}; {extra}".strip("; ") if existing else extra
+
+    body = await request.body()
+
+    # ── Bắt token + trigger crawl khi thấy keyword/product API ──────────────────
+    from etsy_hunt.etsy_hunt_keyword import KEYWORD_API_PATH, PRODUCT_API_PATH, _save_auth
+    auth = request.headers.get("authorization", "")
+    if auth:
+        if KEYWORD_API_PATH in target_url and request.method == "GET":
+            kw = parse_qs(urlparse(target_url).query).get("kw", [""])[0].strip()
+            if kw:
+                _save_auth({
+                    "authorization": auth,
+                    "cookie": fwd.get("cookie", ""),
+                    "user-agent": request.headers.get("user-agent", ""),
+                })
+                print(f"[proxy] ✅ Bắt token + trigger crawl keyword='{kw}'")
+                asyncio.create_task(_run_keyword_crawl_bg(target_url, dict(fwd)))
+        elif PRODUCT_API_PATH in target_url and request.method == "POST":
+            _save_auth({
+                "authorization": auth,
+                "cookie": fwd.get("cookie", ""),
+                "user-agent": request.headers.get("user-agent", ""),
+            })
+            print("[proxy] ✅ Bắt token từ product API")
+
+    # ── Forward request ───────────────────────────────────────────────────────────
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=False, timeout=30.0, verify=False
+        ) as client:
+            resp = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=fwd,
+                content=body,
+            )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Proxy error: {e}")
+
+    # Lưu cookies từ response vào shared jar
+    for ck_name, ck_val in resp.cookies.items():
+        _proxy_cookies[ck_name] = ck_val
+
+    # ── Build response headers ────────────────────────────────────────────────────
+    resp_headers: dict = {}
+    for k, v in resp.headers.items():
+        kl = k.lower()
+        if kl in _SKIP_RESP_HEADERS:
+            continue
+        if kl == "location":
+            for orig, proxy in PROXY_URL_MAP.items():
+                v = v.replace(orig, proxy)
+            resp_headers[k] = v
+        elif kl == "set-cookie":
+            v = re.sub(r";\s*Domain=[^;,]+", "", v, flags=re.IGNORECASE)
+            v = re.sub(r";\s*Secure(?=;|,|$)", "", v, flags=re.IGNORECASE)
+            v = re.sub(r";\s*SameSite=[^;,]+", "; SameSite=Lax", v, flags=re.IGNORECASE)
+            resp_headers[k] = v
+        else:
+            resp_headers[k] = v
+
+    # ── Rewrite HTML content ──────────────────────────────────────────────────────
+    content_type = resp.headers.get("content-type", "")
+    content = resp.content
+    if "text/html" in content_type:
+        text = content.decode("utf-8", errors="replace")
+        text = _rewrite_html(text, f"/api/henull_proxy/{target}")
+        content = text.encode("utf-8")
+
+    return Response(
+        content=content,
+        status_code=resp.status_code,
+        headers=resp_headers,
+        media_type=content_type,
+    )
 
 
 # ── Routes: Status ─────────────────────────────────────────────────────────────

@@ -41,14 +41,12 @@ export default function HuntPage({ setResult, loadHistory }) {
   const [huntCrawling, setHuntCrawling] = useState(false);
   const [huntCrawlProgress, setHuntCrawlProgress] = useState({ current: 0, total: 0, keyword: "", waiting: false });
   const [huntHistoryModalOpen, setHuntHistoryModalOpen] = useState(false);
-  const [henullOverlayVisible, setHenullOverlayVisible] = useState(false);
-  const [henullOverlayMode, setHenullOverlayMode] = useState(null); // "instructions" only (no "running")
-  const [henullStarting, setHenullStarting] = useState(false);
+  const [proxyIframeOpen, setProxyIframeOpen] = useState(false); // iframe proxy HEnull
   const [henullCompleteNotice, setHenullCompleteNotice] = useState(null);
   const [henullWatching, setHenullWatching] = useState(false);
-  const [henullStatusState, setHenullStatusState] = useState("idle"); // "idle" | "crawling" (từ script etsy_hunt)
+  const [henullStatusState, setHenullStatusState] = useState("idle"); // "idle" | "crawling"
   const henullPollRef = useRef({ intervalId: null, lastSeenNewest: null, tick: 0 });
-  const productCrawlingRef = useRef(false); // true while etsy_hunt is crawling products
+  const productCrawlingRef = useRef(false);
 
   // ── Product DB state ──────────────────────────────────────────────────────
   const [productSearchKey, setProductSearchKey] = useState("");
@@ -69,36 +67,14 @@ export default function HuntPage({ setResult, loadHistory }) {
   const [productSort, setProductSort] = useState({ col: null, dir: "desc" });
   const [productTagModal, setProductTagModal] = useState(null); // array of tags to show
 
-  const handleOpenHenull = async () => {
-    setHenullStarting(true);
-    // Mở tab blank NGAY LẬP TỨC khi user click (trước await) để tránh bị popup blocker chặn.
-    // Sau khi fetch xong sẽ navigate tab đó đến novnc_url.
-    const newTab = window.open("about:blank", "_blank");
-    try {
-      const res = await fetch(`${API_BASE}/api/open_henull`, { method: "POST" });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.novnc_url && newTab) {
-          newTab.location.href = data.novnc_url;
-        } else if (newTab && !data.novnc_url) {
-          newTab.close(); // không có URL thì đóng tab trắng
-        }
-        setHenullOverlayVisible(true);
-        setHenullOverlayMode("instructions");
-      } else {
-        if (newTab) newTab.close();
-      }
-    } catch (_) {
-      if (newTab) newTab.close();
-    } finally {
-      setHenullStarting(false);
-    }
+  // Mở iframe proxy HEnull — không cần gọi API backend, chỉ show iframe
+  const handleOpenHenull = () => {
+    setProxyIframeOpen(true);
   };
 
-  /** Đóng overlay, bắt đầu polling; không giữ overlay "đang chạy" vì lúc nào script thực sự crawl (sau khi user search) frontend không biết. */
-  const dismissHenullOverlayAndStartWatching = async () => {
-    setHenullOverlayVisible(false);
-    setHenullOverlayMode(null);
+  // Đóng iframe, bắt đầu polling để phát hiện CSV mới
+  const dismissProxyAndStartWatching = async () => {
+    setProxyIframeOpen(false);
     setHenullCompleteNotice(null);
     try {
       const res = await fetch(`${API_BASE}/api/etsy_hunt/history`);
@@ -300,6 +276,14 @@ export default function HuntPage({ setResult, loadHistory }) {
     };
   }, [henullWatching]);
 
+  // Tự đóng iframe khi crawl bắt đầu (proxy đã bắt token + trigger crawl)
+  useEffect(() => {
+    if (henullStatusState === "crawling" && proxyIframeOpen) {
+      setProxyIframeOpen(false);
+      if (!henullWatching) setHenullWatching(true);
+    }
+  }, [henullStatusState]);
+
   const huntActiveFilterCount = Object.keys(huntFilters).length;
 
   // ── Product DB helpers ──────────────────────────────────────────────────────
@@ -490,45 +474,42 @@ export default function HuntPage({ setResult, loadHistory }) {
         />
       )}
 
-      {/* Henull overlay */}
-      {(henullStarting || henullOverlayVisible || (henullWatching && henullStatusState === "crawling")) && (
-        <div
-          className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center"
-          style={{ cursor: henullStarting || henullStatusState === "crawling" ? "wait" : "default" }}
-          role="dialog" aria-modal="true" aria-labelledby="henull-overlay-title"
-        >
+      {/* iframe proxy HEnull */}
+      {proxyIframeOpen && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-3">
           <div
-            className="bg-white rounded-2xl px-8 py-7 shadow-2xl text-center"
-            style={{ maxWidth: henullWatching && henullStatusState === "crawling" ? "380px" : "420px", pointerEvents: henullStatusState === "crawling" ? "none" : "auto" }}
+            className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+            style={{ width: "92vw", height: "92vh" }}
           >
-            {henullStarting ? (
-              <>
-                <Spinner className="mx-auto mb-4" />
-                <p id="henull-overlay-title" className="text-base font-semibold text-gray-900">Đang khởi chạy HEnull...</p>
-              </>
-            ) : henullWatching && henullStatusState === "crawling" ? (
-              <>
-                <Spinner className="mx-auto mb-4" />
-                <p id="henull-overlay-title" className="text-base font-semibold text-gray-900 mb-2">Script HEnull đang chạy</p>
-                <p className="text-sm text-gray-700 mb-2">Crawl p=1 → p=100 (xem tiến trình trong terminal).</p>
-                <p className="text-sm text-gray-500">Vui lòng chờ. Sẽ tự đóng khi crawl xong và lưu CSV.</p>
-              </>
-            ) : (
-              <>
-                <p id="henull-overlay-title" className="text-lg font-bold text-gray-900 mb-3">Đã khởi chạy HEnull (Etsy Hunt)</p>
-                <div className="text-sm text-gray-700 text-left mb-4 leading-relaxed">
-                  Tab noVNC vừa mở — đây là màn hình VPS. Làm lần lượt:
-                  <ul className="mt-2 ml-4 list-disc space-y-1">
-                    <li>Bấm <b>Connect</b>, nhập mật khẩu: <b className="text-violet-600 select-all">123456</b></li>
-                    <li>Đăng nhập HEnull trong browser trên màn hình VPS</li>
-                    <li>Vào Etsy Keyword Tool và search keyword</li>
-                    <li>Script sẽ tự bắt API → đóng browser → crawl p=1..100 và lưu CSV</li>
-                  </ul>
-                  Bấm &quot;Đã hiểu&quot; để đóng. Overlay sẽ hiện lại khi script bắt đầu crawl (vòng for).
-                </div>
-                <Button variant="sky" onClick={dismissHenullOverlayAndStartWatching}>Đã hiểu</Button>
-              </>
-            )}
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+              <span className="text-sm font-bold text-gray-900">🔑 HEnull — Etsy Hunt</span>
+              <button
+                type="button"
+                onClick={dismissProxyAndStartWatching}
+                className="text-xs text-gray-500 hover:text-gray-800 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                ✕ Đóng &amp; bắt đầu theo dõi
+              </button>
+            </div>
+            {/* Steps bar */}
+            <div className="px-5 py-2 bg-blue-50 border-b border-blue-100 flex items-center gap-3 text-xs text-blue-700 shrink-0 flex-wrap">
+              <span>1️⃣ Đăng nhập HEnull</span>
+              <span className="text-blue-300">→</span>
+              <span>2️⃣ Vào <b>Keyword Tool</b></span>
+              <span className="text-blue-300">→</span>
+              <span>3️⃣ Search keyword bất kỳ</span>
+              <span className="text-blue-300">→</span>
+              <span>4️⃣ Tool tự crawl p=1..100 và lưu CSV ✅</span>
+            </div>
+            {/* iframe */}
+            <iframe
+              src={`${API_BASE}/api/henull_proxy/main/auth/login`}
+              title="HEnull"
+              className="flex-1 w-full"
+              style={{ border: "none" }}
+              allow="*"
+            />
           </div>
         </div>
       )}
@@ -543,6 +524,19 @@ export default function HuntPage({ setResult, loadHistory }) {
             )}
           </p>
           <Button variant="outline" size="xs" onClick={() => setHenullCompleteNotice(null)}>Đóng</Button>
+        </div>
+      )}
+
+      {/* Nhắc nhở khi đang crawl ngầm */}
+      {henullWatching && henullStatusState === "crawling" && !proxyIframeOpen && (
+        <div className="mb-4 p-3 bg-sky-50 border border-sky-100 rounded-xl flex items-center justify-between animate-pulse">
+          <div className="flex items-center gap-3">
+            <Spinner className="w-4 h-4 text-sky-600" />
+            <span className="text-sm font-medium text-sky-800">
+              HEnull đang crawl dữ liệu ngầm... (p=1 → 100)
+            </span>
+          </div>
+          <span className="text-xs text-sky-500 italic">Sẽ tự động xuất hiện trong lịch sử khi xong</span>
         </div>
       )}
 
@@ -565,8 +559,8 @@ export default function HuntPage({ setResult, loadHistory }) {
       {huntTab === "keyword" && (<>
       {/* Open HEnull + History button */}
       <div className="mb-4 flex gap-2 items-center flex-wrap">
-        <Button variant="sky" disabled={henullStarting} onClick={handleOpenHenull}>
-          {henullStarting ? "Đang mở..." : "Mở HEnull (Etsy Hunt)"}
+        <Button variant="sky" onClick={handleOpenHenull}>
+          Mở HEnull (Etsy Hunt)
         </Button>
         <Button
           variant="outline"
