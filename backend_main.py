@@ -31,7 +31,7 @@ def _get_supabase():
     return _supabase
 
 
-_SKIP_AUTH_PREFIXES = ("/api/auth/", "/health", "/avatars/", "/api/henull_proxy/")
+_SKIP_AUTH_PREFIXES = ("/api/auth/", "/health", "/avatars/")
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):

@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -32,8 +32,11 @@ ETSY_HUNT_STATUS_FILE = _etsy_hunt_base() / "status.json"
 def _get_status_file(project_id: str = None) -> Path:
     return _etsy_hunt_base() / f"status_{project_id}.json" if project_id else ETSY_HUNT_STATUS_FILE
 
-from etsy_hunt.etsy_hunt_keyword import _keyword_history_dir
-from etsy_hunt.etsy_hunt_product import _product_history_dir
+from etsy_hunt.etsy_hunt_keyword import (
+    _keyword_history_dir, crawl_keyword_pages, save_keywords_csv,
+    _save_auth, HENULL_LOGIN_URL, KEYWORD_API_PATH, PRODUCT_API_PATH,
+)
+from etsy_hunt.etsy_hunt_product import _product_history_dir, crawl_products
 ETSY_HUNT_PROMPTS_FILE = _etsy_hunt_base() / "prompts.json"
 
 NER_ATTRS = [
@@ -60,176 +63,145 @@ class ProductListRequest(BaseModel):
     page_size: int = 20
 
 
-# ── Reverse Proxy: HEnull ─────────────────────────────────────────────────────
 
-PROXY_TARGETS = {
-    "main": "https://www.henull.com",
-    "tool": "https://lzgawl7j.realnull.com",
-}
-PROXY_URL_MAP = {v: f"/api/henull_proxy/{k}" for k, v in PROXY_TARGETS.items()}
+@router.websocket("/ws/henull-browser")
+async def henull_browser_ws(
+    websocket: WebSocket,
+    mode: str = "product",
+    project_id: str = None,
+):
+    """
+    Stream Playwright browser → user thao tác login + search → bắt API.
+    mode: "product" | "keyword"
+    """
+    await websocket.accept()
+    stop = asyncio.Event()
+    captured_event = asyncio.Event()
+    captured_info: dict = {}
 
-_INJECT_SCRIPT_TPL = (
-    "<script>(function(){"
-    "var M={'https://www.henull.com':'/api/henull_proxy/main',"
-    "'https://lzgawl7j.realnull.com':'/api/henull_proxy/tool'};"
-    "var P='__PFX__';"
-    "function rw(u){"
-    "if(!u||typeof u!=='string')return u;"
-    "for(var k in M){if(u.indexOf(k)===0)return M[k]+u.slice(k.length);}"
-    "if(u.indexOf('/')===0 && u.indexOf('/api/henull_proxy/')!==0)return P+u;"
-    "return u;"
-    "}"
-    "var oF=window.fetch.bind(window);"
-    "window.fetch=function(i,n){return oF(typeof i==='string'?rw(i):i,n);};"
-    "var oO=XMLHttpRequest.prototype.open;"
-    "XMLHttpRequest.prototype.open=function(m,u){"
-    "return oO.apply(this,[m,rw(u)].concat([].slice.call(arguments,2)));};"
-    "function ph(f){return function(s,t,u){"
-    "if(u&&u[0]==='/'&&u.indexOf('/api/')!==0)u=P+u;"
-    "return f.call(this,s,t,u);};}"
-    "if(history.pushState){history.pushState=ph(history.pushState);}"
-    "if(history.replaceState){history.replaceState=ph(history.replaceState);}"
-    "})();</script>"
-)
-
-_SKIP_REQ_HEADERS = {"host", "content-length", "transfer-encoding", "connection", "keep-alive", "upgrade", "te"}
-_SKIP_RESP_HEADERS = {
-    "content-encoding", "content-length", "transfer-encoding",
-    "x-frame-options", "content-security-policy",
-    "content-security-policy-report-only", "strict-transport-security",
-}
-
-def _rewrite_content(text: str, prefix: str) -> str:
-    """Rewrite absolute URLs and escaped absolute URLs in text/js/css."""
-    for orig, proxy in PROXY_URL_MAP.items():
-        text = text.replace(orig, proxy)
-        text = text.replace(orig.replace("/", "\\/"), proxy.replace("/", "\\/"))
-    return text
-
-def _rewrite_html(html: str, prefix: str) -> str:
-    html = _rewrite_content(html, prefix)
-    inject = _INJECT_SCRIPT_TPL.replace("__PFX__", prefix)
-    lo = html.lower()
-    if "<head>" in lo:
-        idx = lo.index("<head>") + 6
-        html = html[:idx] + inject + html[idx:]
-    elif "<body>" in lo:
-        idx = lo.index("<body>") + 6
-        html = html[:idx] + inject + html[idx:]
-    else:
-        html = inject + html
-    return html
-
-async def _run_keyword_crawl_bg(orig_url: str, headers: dict, project_id: str = None) -> None:
     try:
-        from etsy_hunt.etsy_hunt_keyword import crawl_keyword_pages, save_keywords_csv
-        items = await crawl_keyword_pages(orig_url, headers, project_id)
-        if items:
-            kw = parse_qs(urlparse(orig_url).query).get("kw", ["unknown"])[0]
-            save_keywords_csv(kw, items, project_id)
-    except Exception as e:
-        print(f"[proxy crawl] lỗi: {e}")
+        from undetected_playwright.async_api import async_playwright
+        from urllib.parse import parse_qs, urlparse
+        import json as _j
 
-@router.api_route(
-    "/api/henull_proxy/{target}/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-)
-async def henull_proxy(target: str, path: str, request: Request):
-    if target not in PROXY_TARGETS:
-        raise HTTPException(status_code=404, detail="Invalid proxy target")
-
-    base = PROXY_TARGETS[target]
-    target_url = f"{base}/{path}"
-    if request.url.query:
-        target_url += f"?{request.url.query}"
-
-    # Forward headers
-    fwd: dict = {}
-    for k, v in request.headers.items():
-        kl = k.lower()
-        if kl in _SKIP_REQ_HEADERS: continue
-        if kl == "origin": fwd["origin"] = base
-        elif kl == "referer":
-            for pfx_key in PROXY_TARGETS:
-                pfx = f"/api/henull_proxy/{pfx_key}"
-                if pfx in v:
-                    v = v.replace(str(request.base_url).rstrip("/") + pfx, PROXY_TARGETS[pfx_key])
-                    v = v.replace(pfx, PROXY_TARGETS[pfx_key])
-            fwd["referer"] = v
-        else: fwd[k] = v
-    fwd["host"] = base.replace("https://", "").replace("http://", "")
-
-    body = await request.body()
-
-    # Capture auth for keyword hunt
-    from etsy_hunt.etsy_hunt_keyword import KEYWORD_API_PATH, PRODUCT_API_PATH, _save_auth
-    auth = request.headers.get("authorization", "")
-    if auth:
-        if KEYWORD_API_PATH in target_url and request.method == "GET":
-            kw = parse_qs(urlparse(target_url).query).get("kw", [""])[0].strip()
-            if kw:
-                _save_auth({"authorization": auth, "cookie": fwd.get("cookie", ""), "user-agent": request.headers.get("user-agent", "")})
-                print(f"[proxy] ✅ Captured auth for '{kw}'")
-                asyncio.create_task(_run_keyword_crawl_bg(target_url, dict(fwd)))
-        elif PRODUCT_API_PATH in target_url and request.method == "POST":
-            _save_auth({"authorization": auth, "cookie": fwd.get("cookie", ""), "user-agent": request.headers.get("user-agent", "")})
-            print(f"[proxy] ✅ Captured auth from product API")
-
-    # Request to target
-    try:
-        async with httpx.AsyncClient(follow_redirects=False, timeout=30.0, verify=False) as client:
-            resp = await client.request(
-                method=request.method, url=target_url, headers=fwd, content=body
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=False)
+            context = await browser.new_context(
+                ignore_https_errors=True,
+                viewport={"width": 1280, "height": 800},
             )
+            page = await context.new_page()
+
+            def on_request(req):
+                if captured_event.is_set():
+                    return
+                if mode == "keyword":
+                    if KEYWORD_API_PATH not in req.url:
+                        return
+                    kw = parse_qs(urlparse(req.url).query).get("kw", [""])[0].strip()
+                    if not kw:
+                        return
+                    captured_info.update({"type": "keyword", "url": req.url, "headers": dict(req.headers)})
+                else:
+                    if PRODUCT_API_PATH not in req.url or req.method != "POST":
+                        return
+                    hdrs = dict(req.headers)
+                    if not hdrs.get("authorization"):
+                        return
+                    try:
+                        body = _j.loads(req.post_data or "{}")
+                        sk = body.get("search_key", "").strip()
+                        if not sk:
+                            return
+                    except Exception:
+                        return
+                    captured_info.update({"type": "product", "url": req.url, "headers": hdrs, "body": body, "search_key": sk})
+                captured_event.set()
+                stop.set()
+
+            page.on("request", on_request)
+            context.on("page", lambda pg: pg.on("request", on_request))
+            await page.goto(HENULL_LOGIN_URL, timeout=60000, wait_until="domcontentloaded")
+
+            # Task 1: stream screenshots
+            async def send_screenshots():
+                while not stop.is_set():
+                    try:
+                        shot = await page.screenshot(type="jpeg", quality=60)
+                        await websocket.send_bytes(shot)
+                    except Exception:
+                        stop.set()
+                        return
+                    await asyncio.sleep(0.05)
+
+            # Task 2: receive input events from user
+            async def recv_input():
+                while not stop.is_set():
+                    try:
+                        msg = await websocket.receive()
+                        if msg["type"] == "websocket.disconnect":
+                            stop.set()
+                            return
+                        text = msg.get("text")
+                        if not text:
+                            continue
+                        ev = _j.loads(text)
+                        t = ev.get("type")
+                        if t == "mousemove":
+                            await page.mouse.move(ev["x"], ev["y"])
+                        elif t == "click":
+                            await page.mouse.click(ev["x"], ev["y"])
+                        elif t == "scroll":
+                            await page.mouse.wheel(ev.get("deltaX", 0), ev.get("deltaY", 0))
+                        elif t == "keydown":
+                            await page.keyboard.down(ev["key"])
+                        elif t == "keyup":
+                            await page.keyboard.up(ev["key"])
+                        elif t == "type":
+                            await page.keyboard.type(ev["text"])
+                    except WebSocketDisconnect:
+                        stop.set()
+                        return
+                    except Exception:
+                        pass
+
+            t1 = asyncio.create_task(send_screenshots())
+            t2 = asyncio.create_task(recv_input())
+            await stop.wait()
+            t1.cancel()
+            t2.cancel()
+            await asyncio.gather(t1, t2, return_exceptions=True)
+            await browser.close()
+
+        if not captured_event.is_set():
+            return  # user disconnected without capturing
+
+        _save_auth(captured_info["headers"])
+        await websocket.send_text(json.dumps({"type": "captured", "mode": captured_info["type"]}))
+
+        # Start crawl in background
+        from urllib.parse import parse_qs, urlparse
+        if captured_info["type"] == "keyword":
+            async def _crawl_kw():
+                items = await crawl_keyword_pages(captured_info["url"], captured_info["headers"], project_id)
+                if items:
+                    kw = parse_qs(urlparse(captured_info["url"]).query).get("kw", ["unknown"])[0]
+                    save_keywords_csv(kw, items, project_id)
+            asyncio.create_task(_crawl_kw())
+        else:
+            asyncio.create_task(crawl_products(
+                captured_info["url"], captured_info["headers"],
+                captured_info["body"], captured_info["search_key"], project_id,
+            ))
+
+    except WebSocketDisconnect:
+        pass
     except Exception as e:
-        print(f"[proxy] ERROR requesting {target_url}: {e}")
-        raise HTTPException(status_code=502, detail=f"Proxy error: {e}")
+        try:
+            await websocket.send_text(json.dumps({"type": "error", "message": str(e)}))
+        except Exception:
+            pass
 
-    # LOGGING: Giúp bạn debug trên VPS
-    print(f"[proxy] {request.method} {resp.status_code} {target_url}")
-
-    # Response headers
-    resp_headers: dict = {}
-    for k, v in resp.headers.items():
-        kl = k.lower()
-        if kl in _SKIP_RESP_HEADERS: continue
-        if kl == "location":
-            if v.startswith("/") and not v.startswith("/api/henull_proxy/"):
-                v = f"/api/henull_proxy/{target}{v}"
-            else:
-                for orig, proxy in PROXY_URL_MAP.items():
-                    v = v.replace(orig, proxy)
-            resp_headers[k] = v
-        elif kl == "set-cookie":
-            # Gỡ bỏ Domain và Secure để trình duyệt chấp nhận Cookie trên IP VPS
-            v = re.sub(r";\s*Domain=[^;,]+", "", v, flags=re.IGNORECASE)
-            v = re.sub(r";\s*Secure(?=;|,|$)", "", v, flags=re.IGNORECASE)
-            # Ép SameSite=Lax để Session hoạt động tốt trong Iframe
-            if "SameSite=" in v:
-                v = re.sub(r";\s*SameSite=[^;,]+", "; SameSite=Lax", v, flags=re.IGNORECASE)
-            else:
-                v += "; SameSite=Lax"
-            resp_headers[k] = v
-        else: resp_headers[k] = v
-
-    # Thêm CORS headers để tránh bị trình duyệt chặn các request AJAX từ HEnull
-    resp_headers["Access-Control-Allow-Origin"] = "*"
-    resp_headers["Access-Control-Allow-Methods"] = "*"
-    resp_headers["Access-Control-Allow-Headers"] = "*"
-
-    # Content rewrite
-    ct = resp.headers.get("content-type", "").lower()
-    content = resp.content
-    prefix = f"/api/henull_proxy/{target}"
-    if "text/html" in ct:
-        content = _rewrite_html(content.decode("utf-8", errors="replace"), prefix).encode("utf-8")
-    elif "javascript" in ct or "css" in ct:
-        content = _rewrite_content(content.decode("utf-8", errors="replace"), prefix).encode("utf-8")
-
-    return Response(content=content, status_code=resp.status_code, headers=resp_headers, media_type=ct)
-
-
-# ── Rest of routes (Status, History, etc.) ────────────────────────────────────
 
 @router.get("/api/etsy_hunt/status")
 async def get_etsy_hunt_status(project_id: str = None):

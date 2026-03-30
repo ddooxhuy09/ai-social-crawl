@@ -1,6 +1,4 @@
 import json
-import os
-import sys
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
@@ -9,36 +7,6 @@ from create_image_by_ai.image_generator import GEMINI_TEXT_MODEL, _get_gemini_cl
 
 router = APIRouter()
 
-def _launch_henull_script(script_name: str, project_id: str):
-    import subprocess
-    project_dir = Path(__file__).resolve().parent.parent
-    script_path = project_dir / "etsy_hunt" / script_name
-    if not script_path.exists():
-        raise HTTPException(status_code=500, detail=f"Không tìm thấy {script_name}.")
-    venv_python = project_dir / "social_crawl" / "Scripts" / "python.exe"
-    python_exe = str(venv_python) if venv_python.exists() else sys.executable
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
-    try:
-        subprocess.Popen([python_exe, str(script_path), "--project-id", project_id],
-                         cwd=str(project_dir), env=env)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Không mở được HEnull: {e}")
-
-
-@router.post("/{project_id}/original/open-henull")
-async def open_henull_product(project_id: str):
-    """Mở HEnull Product crawl cho Original phase."""
-    _launch_henull_script("etsy_hunt_product.py", project_id)
-    novnc_url = os.getenv("NOVNC_URL", "")
-    return {"status": "started", "novnc_url": novnc_url}
-
-
-@router.post("/{project_id}/final/open-henull")
-async def open_henull_keyword(project_id: str):
-    """Mở HEnull Keyword crawl cho Final phase."""
-    _launch_henull_script("etsy_hunt_keyword.py", project_id)
-    novnc_url = os.getenv("NOVNC_URL", "")
-    return {"status": "started", "novnc_url": novnc_url}
 
 @router.post("/{project_id}/original/generate-keyword")
 def generate_keyword(project_id: str, body: dict):

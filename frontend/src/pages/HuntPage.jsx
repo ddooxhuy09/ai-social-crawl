@@ -7,8 +7,6 @@ import { Spinner } from "../components/ui/spinner";
 
 /** Delay (ms) giữa mỗi keyword khi crawl nhiều keyword — tránh bị block / phát hiện bot */
 const CRAWL_KEYWORD_DELAY_MS = 6000;
-/** Poll mỗi N ms để kiểm tra HEnull script đã lưu CSV xong chưa */
-const HENULL_POLL_INTERVAL_MS = 10000;
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -41,11 +39,7 @@ export default function HuntPage({ setResult, loadHistory }) {
   const [huntCrawling, setHuntCrawling] = useState(false);
   const [huntCrawlProgress, setHuntCrawlProgress] = useState({ current: 0, total: 0, keyword: "", waiting: false });
   const [huntHistoryModalOpen, setHuntHistoryModalOpen] = useState(false);
-  const [proxyIframeOpen, setProxyIframeOpen] = useState(false); // iframe proxy HEnull
-  const [henullCompleteNotice, setHenullCompleteNotice] = useState(null);
-  const [henullWatching, setHenullWatching] = useState(false);
-  const [henullStatusState, setHenullStatusState] = useState("idle"); // "idle" | "crawling"
-  const henullPollRef = useRef({ intervalId: null, lastSeenNewest: null, tick: 0 });
+  const [henullStarting, setHenullStarting] = useState(false);
   const productCrawlingRef = useRef(false);
 
   // ── Product DB state ──────────────────────────────────────────────────────
@@ -67,24 +61,6 @@ export default function HuntPage({ setResult, loadHistory }) {
   const [productSort, setProductSort] = useState({ col: null, dir: "desc" });
   const [productTagModal, setProductTagModal] = useState(null); // array of tags to show
 
-  // Mở iframe proxy HEnull — không cần gọi API backend, chỉ show iframe
-  const handleOpenHenull = () => {
-    setProxyIframeOpen(true);
-  };
-
-  // Đóng iframe, bắt đầu polling để phát hiện CSV mới
-  const dismissProxyAndStartWatching = async () => {
-    setProxyIframeOpen(false);
-    setHenullCompleteNotice(null);
-    try {
-      const res = await fetch(`${API_BASE}/api/etsy_hunt/history`);
-      const list = await res.json();
-      henullPollRef.current.lastSeenNewest = list?.[0]?.filename ?? null;
-    } catch (_) {
-      henullPollRef.current.lastSeenNewest = null;
-    }
-    setHenullWatching(true);
-  };
 
   const loadHuntHistory = async () => {
     setHuntHistoryLoading(true);
@@ -230,59 +206,6 @@ export default function HuntPage({ setResult, loadHistory }) {
 
   useEffect(() => { loadHuntHistory(); loadProductHistory(); }, []);
 
-  useEffect(() => {
-    if (!henullWatching) return;
-    const poll = async () => {
-      try {
-        const statusRes = await fetch(`${API_BASE}/api/etsy_hunt/status`);
-        const statusData = await statusRes.json();
-        const state = statusData.state;
-        if (state === "crawling_products") {
-          productCrawlingRef.current = true;
-          setProductLoading(true);
-          setHenullStatusState("crawling_products");
-        } else {
-          setHenullStatusState(state === "crawling" ? "crawling" : "idle");
-          if (productCrawlingRef.current && state === "idle") {
-            productCrawlingRef.current = false;
-            setProductLoading(false);
-            loadProductResults();
-            loadProductHistory();
-          }
-        }
-
-        henullPollRef.current.tick = (henullPollRef.current.tick || 0) + 1;
-        const every = Math.max(1, HENULL_POLL_INTERVAL_MS / 2000);
-        if (henullPollRef.current.tick % every === 0) {
-          const historyRes = await fetch(`${API_BASE}/api/etsy_hunt/history`);
-          const list = await historyRes.json();
-          const newest = list?.[0]?.filename ?? null;
-          if (newest && newest !== henullPollRef.current.lastSeenNewest) {
-            setHenullCompleteNotice({ filename: list[0].filename, created_at: list[0].created_at });
-            setHenullWatching(false);
-            setHenullStatusState("idle");
-            loadHuntHistory();
-          }
-        }
-      } catch (_) {}
-    };
-    poll();
-    const id = setInterval(poll, 2000);
-    henullPollRef.current.intervalId = id;
-    return () => {
-      clearInterval(henullPollRef.current.intervalId);
-      henullPollRef.current.intervalId = null;
-      henullPollRef.current.tick = 0;
-    };
-  }, [henullWatching]);
-
-  // Tự đóng iframe khi crawl bắt đầu (proxy đã bắt token + trigger crawl)
-  useEffect(() => {
-    if (henullStatusState === "crawling" && proxyIframeOpen) {
-      setProxyIframeOpen(false);
-      if (!henullWatching) setHenullWatching(true);
-    }
-  }, [henullStatusState]);
 
   const huntActiveFilterCount = Object.keys(huntFilters).length;
 
@@ -465,80 +388,6 @@ export default function HuntPage({ setResult, loadHistory }) {
         />
       )}
 
-      {/* Loading overlay — crawling products from HEnull */}
-      {henullStatusState === "crawling_products" && (
-        <LoadingOverlay
-          title="Script HEnull đang crawl sản phẩm..."
-          subtitle="Crawl p=1 → p=100 (xem tiến trình trong terminal). Sẽ tự đóng khi xong."
-          spinnerColor="#6366f1"
-        />
-      )}
-
-      {/* iframe proxy HEnull */}
-      {proxyIframeOpen && (
-        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-3">
-          <div
-            className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-            style={{ width: "92vw", height: "92vh" }}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
-              <span className="text-sm font-bold text-gray-900">🔑 HEnull — Etsy Hunt</span>
-              <button
-                type="button"
-                onClick={dismissProxyAndStartWatching}
-                className="text-xs text-gray-500 hover:text-gray-800 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-              >
-                ✕ Đóng &amp; bắt đầu theo dõi
-              </button>
-            </div>
-            {/* Steps bar */}
-            <div className="px-5 py-2 bg-blue-50 border-b border-blue-100 flex items-center gap-3 text-xs text-blue-700 shrink-0 flex-wrap">
-              <span>1️⃣ Đăng nhập HEnull</span>
-              <span className="text-blue-300">→</span>
-              <span>2️⃣ Vào <b>Keyword Tool</b></span>
-              <span className="text-blue-300">→</span>
-              <span>3️⃣ Search keyword bất kỳ</span>
-              <span className="text-blue-300">→</span>
-              <span>4️⃣ Tool tự crawl p=1..100 và lưu CSV ✅</span>
-            </div>
-            {/* iframe */}
-            <iframe
-              src={`${API_BASE}/api/henull_proxy/main/auth/login`}
-              title="HEnull"
-              className="flex-1 w-full"
-              style={{ border: "none" }}
-              allow="*"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Complete notice */}
-      {henullCompleteNotice && (
-        <div className="mb-4 px-4 py-3 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between flex-wrap gap-2">
-          <p className="text-sm text-emerald-800 font-semibold">
-            ✅ Crawl xong! Đã lưu: {henullCompleteNotice.filename}
-            {henullCompleteNotice.created_at && (
-              <span className="font-normal text-emerald-700 ml-1.5">({henullCompleteNotice.created_at})</span>
-            )}
-          </p>
-          <Button variant="outline" size="xs" onClick={() => setHenullCompleteNotice(null)}>Đóng</Button>
-        </div>
-      )}
-
-      {/* Nhắc nhở khi đang crawl ngầm */}
-      {henullWatching && henullStatusState === "crawling" && !proxyIframeOpen && (
-        <div className="mb-4 p-3 bg-sky-50 border border-sky-100 rounded-xl flex items-center justify-between animate-pulse">
-          <div className="flex items-center gap-3">
-            <Spinner className="w-4 h-4 text-sky-600" />
-            <span className="text-sm font-medium text-sky-800">
-              HEnull đang crawl dữ liệu ngầm... (p=1 → 100)
-            </span>
-          </div>
-          <span className="text-xs text-sky-500 italic">Sẽ tự động xuất hiện trong lịch sử khi xong</span>
-        </div>
-      )}
 
       {/* Tab switcher */}
       <div className="mb-4 flex gap-1 border-b border-gray-200">
@@ -559,14 +408,11 @@ export default function HuntPage({ setResult, loadHistory }) {
       {huntTab === "keyword" && (<>
       {/* Open HEnull + History button */}
       <div className="mb-4 flex gap-2 items-center flex-wrap">
-        <Button variant="sky" onClick={handleOpenHenull}>
-          Mở HEnull (Etsy Hunt)
-        </Button>
         <Button
           variant="outline"
           onClick={() => { setHuntHistoryModalOpen(true); loadHuntHistory(); }}
         >
-          📂 Lịch sử
+          📂 Lịch sử keyword
           {huntHistory.length > 0 && (
             <span className="ml-1.5 text-xs text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">{huntHistory.length}</span>
           )}
@@ -586,9 +432,6 @@ export default function HuntPage({ setResult, loadHistory }) {
         >
           {classifyingFile ? "⏳ Đang phân loại..." : "🤖 AI Classify"}
         </button>
-        <span className="text-xs text-gray-500">
-          Đăng nhập HEnull, search keyword, script tự crawl p=1..100 và lưu CSV.
-        </span>
       </div>
 
       {/* History modal */}
@@ -907,19 +750,15 @@ export default function HuntPage({ setResult, loadHistory }) {
         <div>
           {/* Open HEnull + History */}
           <div className="mb-4 flex gap-2 items-center flex-wrap">
-            <Button variant="sky" disabled={henullStarting} onClick={handleOpenHenull}>
-              {henullStarting ? "Đang mở..." : "Mở HEnull (Etsy Hunt)"}
-            </Button>
             <Button
               variant="outline"
               onClick={() => { setProductHistoryModalOpen(true); loadProductHistory(); }}
             >
-              📂 Lịch sử
+              📂 Lịch sử sản phẩm
               {productHistory.length > 0 && (
                 <span className="ml-1.5 text-xs text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">{productHistory.length}</span>
               )}
             </Button>
-            <span className="text-xs text-gray-500">Đăng nhập HEnull → vào Product Research → search sản phẩm. Script sẽ tự crawl và hiển thị kết quả.</span>
           </div>
 
           {/* Product history modal */}

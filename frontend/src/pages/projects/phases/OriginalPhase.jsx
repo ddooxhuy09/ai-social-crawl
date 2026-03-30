@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { API_BASE } from "../../../constants";
+import BrowserStreamModal from "../../../components/BrowserStreamModal";
 
 const HENULL_POLL_MS = 5000;
 
@@ -7,33 +8,27 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
   const original = project.original || {};
 
   // ── HEnull open & status watch ───────────────────────────────────────────────
-  const [openingHenull, setOpeningHenull] = useState(false);
+  const [browserModalOpen, setBrowserModalOpen] = useState(false);
   const [henullMsg, setHenullMsg] = useState("");
   const [henullWatching, setHenullWatching] = useState(false);
   const [henullCrawling, setHenullCrawling] = useState(false);
   const henullPollRef = useRef({ lastSeenNewest: null });
 
   const handleOpenHenull = async () => {
-    setOpeningHenull(true);
-    setHenullMsg("");
+    // Seed lastSeen trước khi mở modal
     try {
-      const res = await fetch(`${API_BASE}/api/projects/${project.id}/original/open-henull`, { method: "POST" });
-      if (!res.ok) throw new Error((await res.json()).detail || "Lỗi mở HEnull");
-      const data = await res.json();
-      if (data.novnc_url) window.open(data.novnc_url, "_blank");
-      setHenullMsg("✅ Tab noVNC đã mở. Connect → mật khẩu: 123456 → đăng nhập HEnull → search keyword.");
-      // seed lastSeen then start polling
-      try {
-        const h = await fetch(`${API_BASE}/api/etsy_hunt/history?project_id=${project.id}`);
-        const list = await h.json();
-        henullPollRef.current.lastSeenNewest = list?.[0]?.filename ?? null;
-      } catch (_) {}
-      setHenullWatching(true);
-    } catch (e) {
-      setHenullMsg(`❌ ${e.message}`);
-    } finally {
-      setOpeningHenull(false);
-    }
+      const h = await fetch(`${API_BASE}/api/etsy_hunt/history?project_id=${project.id}`);
+      const list = await h.json();
+      henullPollRef.current.lastSeenNewest = list?.[0]?.filename ?? null;
+    } catch (_) {}
+    setHenullMsg("");
+    setBrowserModalOpen(true);
+  };
+
+  const handleBrowserCaptured = ({ mode }) => {
+    setBrowserModalOpen(false);
+    setHenullMsg(`✅ Đã bắt được API (${mode}). Đang crawl dữ liệu...`);
+    setHenullWatching(true);
   };
 
   useEffect(() => {
@@ -301,11 +296,19 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
       <section className="flex flex-col gap-2">
         <div className="flex items-center gap-3 flex-wrap">
           <button
-            type="button" onClick={handleOpenHenull} disabled={openingHenull}
-            className="px-4 py-2 rounded-lg bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 disabled:opacity-50 transition-colors"
+            type="button" onClick={handleOpenHenull}
+            className="px-4 py-2 rounded-lg bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 transition-colors"
           >
-            {openingHenull ? "⏳ Đang mở..." : "🌐 Mở HEnull"}
+            🌐 Mở HEnull
           </button>
+
+          <BrowserStreamModal
+            open={browserModalOpen}
+            mode="product"
+            projectId={project.id}
+            onCaptured={handleBrowserCaptured}
+            onClose={() => setBrowserModalOpen(false)}
+          />
           {henullWatching && (
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
               henullCrawling ? "bg-amber-100 text-amber-700 animate-pulse" : "bg-gray-100 text-gray-500"
