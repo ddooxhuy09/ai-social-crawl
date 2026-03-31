@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { API_BASE } from "../../../constants";
-import BrowserStreamModal from "../../../components/BrowserStreamModal";
 
 const HENULL_POLL_MS = 5000;
 
@@ -8,27 +7,30 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
   const original = project.original || {};
 
   // ── HEnull open & status watch ───────────────────────────────────────────────
-  const [browserModalOpen, setBrowserModalOpen] = useState(false);
+  const [openingHenull, setOpeningHenull] = useState(false);
   const [henullMsg, setHenullMsg] = useState("");
   const [henullWatching, setHenullWatching] = useState(false);
   const [henullCrawling, setHenullCrawling] = useState(false);
   const henullPollRef = useRef({ lastSeenNewest: null });
 
   const handleOpenHenull = async () => {
-    // Seed lastSeen trước khi mở modal
-    try {
-      const h = await fetch(`${API_BASE}/api/etsy_hunt/history?project_id=${project.id}`);
-      const list = await h.json();
-      henullPollRef.current.lastSeenNewest = list?.[0]?.filename ?? null;
-    } catch (_) {}
+    setOpeningHenull(true);
     setHenullMsg("");
-    setBrowserModalOpen(true);
-  };
-
-  const handleBrowserCaptured = ({ mode }) => {
-    setBrowserModalOpen(false);
-    setHenullMsg(`✅ Đã bắt được API (${mode}). Đang crawl dữ liệu...`);
-    setHenullWatching(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${project.id}/original/open-henull`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).detail || "Lỗi mở HEnull");
+      setHenullMsg("✅ Browser đã mở trên VPS. Đăng nhập HEnull → search keyword để bắt đầu crawl.");
+      try {
+        const h = await fetch(`${API_BASE}/api/etsy_hunt/history?project_id=${project.id}`);
+        const list = await h.json();
+        henullPollRef.current.lastSeenNewest = list?.[0]?.filename ?? null;
+      } catch (_) {}
+      setHenullWatching(true);
+    } catch (e) {
+      setHenullMsg(`❌ ${e.message}`);
+    } finally {
+      setOpeningHenull(false);
+    }
   };
 
   useEffect(() => {
@@ -56,6 +58,8 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
   const [crawlHistory, setCrawlHistory] = useState([]);
   const [crawlHistoryLoading, setCrawlHistoryLoading] = useState(false);
 
+  const [crawlOpen, setCrawlOpen] = useState(false);
+
   const loadCrawlHistory = useCallback(async () => {
     setCrawlHistoryLoading(true);
     try {
@@ -65,7 +69,13 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
     setCrawlHistoryLoading(false);
   }, [project.id]);
 
-  useEffect(() => { loadCrawlHistory(); }, [loadCrawlHistory]);
+  const handleToggleCrawlHistory = () => {
+    const nextOpen = !crawlOpen;
+    setCrawlOpen(nextOpen);
+    if (nextOpen && crawlHistory.length === 0 && !crawlHistoryLoading) {
+      loadCrawlHistory();
+    }
+  };
 
   // ── Keyword history ──────────────────────────────────────────────────────────
   const [huntHistory, setHuntHistory] = useState([]);
@@ -98,6 +108,8 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
   const [productFilter, setProductFilter] = useState("");
   const [productSort, setProductSort] = useState({ col: "monthly_sales", dir: "desc" });
 
+  const [productOpen, setProductOpen] = useState(false);
+
   const loadProductHistory = useCallback(async () => {
     setProductHistoryLoading(true);
     try {
@@ -107,7 +119,13 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
     setProductHistoryLoading(false);
   }, []);
 
-  useEffect(() => { loadHuntHistory(); loadProductHistory(); }, [loadHuntHistory, loadProductHistory]);
+  const handleToggleProductHistory = () => {
+    const nextOpen = !productOpen;
+    setProductOpen(nextOpen);
+    if (nextOpen && productHistory.length === 0 && !productHistoryLoading) {
+      loadProductHistory();
+    }
+  };
 
   const loadProductDetail = async (filename) => {
     if (productDetailLoading) return;
@@ -296,19 +314,11 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
       <section className="flex flex-col gap-2">
         <div className="flex items-center gap-3 flex-wrap">
           <button
-            type="button" onClick={handleOpenHenull}
-            className="px-4 py-2 rounded-lg bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 transition-colors"
+            type="button" onClick={handleOpenHenull} disabled={openingHenull}
+            className="px-4 py-2 rounded-lg bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 disabled:opacity-50 transition-colors"
           >
-            🌐 Mở HEnull
+            {openingHenull ? "⏳ Đang mở..." : "🌐 Mở HEnull"}
           </button>
-
-          <BrowserStreamModal
-            open={browserModalOpen}
-            mode="product"
-            projectId={project.id}
-            onCaptured={handleBrowserCaptured}
-            onClose={() => setBrowserModalOpen(false)}
-          />
           {henullWatching && (
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
               henullCrawling ? "bg-amber-100 text-amber-700 animate-pulse" : "bg-gray-100 text-gray-500"
@@ -327,47 +337,63 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
 
 
       {/* ── Product DB History ── */}
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-bold text-gray-700">🛍 Product DB History</h3>
-          <button type="button" onClick={loadProductHistory}
-            className="text-xs text-sky-500 hover:underline disabled:opacity-50"
-            disabled={productHistoryLoading}>
-            {productHistoryLoading ? "Loading..." : "↻ Refresh"}
-          </button>
-        </div>
+      <section className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={handleToggleProductHistory}
+          className="flex items-center gap-2 text-left group w-fit"
+        >
+          <span
+            className="text-[10px] text-gray-400 transition-transform duration-150"
+            style={{ display: "inline-block", transform: productOpen ? "rotate(90deg)" : "rotate(0deg)" }}
+          >▶</span>
+          <h3 className="text-sm font-bold text-gray-700 group-hover:text-gray-900">🛍 Product DB History</h3>
+          {productHistoryLoading && <span className="text-xs text-sky-500 animate-pulse">Loading...</span>}
+        </button>
 
-        {productHistory.length === 0 && !productHistoryLoading && (
-          <p className="text-xs text-gray-400 italic">Chưa có lịch sử. Mở Product DB trong tab Hunt để tạo lịch sử.</p>
-        )}
+        {productOpen && (
+          <div className="flex flex-col gap-3 pl-4">
+            <div className="flex justify-end">
+              <button type="button" onClick={loadProductHistory}
+                className="text-xs text-sky-500 hover:underline disabled:opacity-50"
+                disabled={productHistoryLoading}>
+                ↻ Refresh
+              </button>
+            </div>
 
-        {/* Product DB file list */}
-        {productHistory.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            {productHistory.map((h, idx) => {
-              const nameMatch = h.filename.match(/etsy_products_(.+?)_(\d{8}_\d{6})\.csv$/);
-              const displayName = nameMatch ? nameMatch[1] : h.filename.replace(".csv", "");
-              return (
-                <button key={h.filename || idx} type="button" onClick={() => loadProductDetail(h.filename)}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-all text-sm ${
-                    productDetail?.filename === h.filename
-                      ? "border-sky-400 bg-sky-50 text-sky-700"
-                      : "border-gray-200 hover:bg-gray-50 text-gray-700"
-                  }`}>
-                  <span>🛍</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{displayName}</p>
-                    <p className="text-xs text-gray-400 truncate">{h.filename}</p>
-                  </div>
-                  <span className="text-xs text-gray-400 shrink-0">{h.size_kb ? `${h.size_kb} KB` : ""}</span>
-                </button>
-              );
-            })}
+            {productHistory.length === 0 && !productHistoryLoading && (
+              <p className="text-xs text-gray-400 italic">Chưa có lịch sử. Mở Product DB trong tab Hunt để tạo lịch sử.</p>
+            )}
+
+            {/* Product DB file list */}
+            {productHistory.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                {productHistory.map((h, idx) => {
+                  const nameMatch = h.filename.match(/etsy_products_(.+?)_(\d{8}_\d{6})\.csv$/);
+                  const displayName = nameMatch ? nameMatch[1] : h.filename.replace(".csv", "");
+                  return (
+                    <button key={h.filename || idx} type="button" onClick={() => loadProductDetail(h.filename)}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-all text-sm ${
+                        productDetail?.filename === h.filename
+                          ? "border-sky-400 bg-sky-50 text-sky-700"
+                          : "border-gray-200 hover:bg-gray-50 text-gray-700"
+                      }`}>
+                      <span>🛍</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{displayName}</p>
+                        <p className="text-xs text-gray-400 truncate">{h.filename}</p>
+                      </div>
+                      <span className="text-xs text-gray-400 shrink-0">{h.size_kb ? `${h.size_kb} KB` : ""}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {productDetailLoading && (
+              <p className="text-xs text-gray-400 animate-pulse px-1">Loading products...</p>
+            )}
           </div>
-        )}
-
-        {productDetailLoading && (
-          <p className="text-xs text-gray-400 animate-pulse px-1">Loading products...</p>
         )}
       </section>
 
@@ -441,40 +467,56 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
 
       {/* ── Crawl History → navigate to pick Original ── */}
       {!original_item && (
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-gray-700">📂 Crawl History</h3>
-            <button type="button" onClick={loadCrawlHistory} disabled={crawlHistoryLoading}
-              className="text-xs text-sky-500 hover:underline disabled:opacity-50">
-              {crawlHistoryLoading ? "Loading..." : "↻ Refresh"}
-            </button>
-          </div>
+        <section className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={handleToggleCrawlHistory}
+            className="flex items-center gap-2 text-left group w-fit"
+          >
+            <span
+              className="text-[10px] text-gray-400 transition-transform duration-150"
+              style={{ display: "inline-block", transform: crawlOpen ? "rotate(90deg)" : "rotate(0deg)" }}
+            >▶</span>
+            <h3 className="text-sm font-bold text-gray-700 group-hover:text-gray-900">📂 Crawl History</h3>
+            {crawlHistoryLoading && <span className="text-xs text-sky-500 animate-pulse">Loading...</span>}
+          </button>
 
-          {crawlHistory.length === 0 && !crawlHistoryLoading && (
-            <div className="text-xs text-gray-400 italic bg-gray-50 rounded-xl px-4 py-3 text-center">
-              Chưa có lịch sử crawl. Thêm keyword vào Task Queue và chạy để crawl.
-            </div>
-          )}
+          {crawlOpen && (
+            <div className="flex flex-col gap-3 pl-4">
+              <div className="flex justify-end">
+                <button type="button" onClick={loadCrawlHistory} disabled={crawlHistoryLoading}
+                  className="text-xs text-sky-500 hover:underline disabled:opacity-50">
+                  ↻ Refresh
+                </button>
+              </div>
 
-          {crawlHistory.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              {crawlHistory.map(h => {
-                const total = (h.pinterest || 0) + (h.instagram || 0) + (h.tiktok || 0) + (h.youtube || 0);
-                return (
-                  <button key={h.id} type="button"
-                    onClick={() => onNavigate?.("crawl", h.keyword, h.id, { projectId: project.id, projectName: project.name, mode: "pick-original" })}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-200 text-left text-sm hover:bg-emerald-50 hover:border-emerald-300 transition-all group">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-800 truncate group-hover:text-emerald-700">{h.keyword}</p>
-                      <p className="text-xs text-gray-400">{h.created_at?.slice(0, 16).replace("T", " ")} · {total} pins</p>
-                    </div>
-                    {h.pinterest > 0 && <span className="text-xs bg-red-50 text-red-400 px-2 py-0.5 rounded-full shrink-0">📌 {h.pinterest}</span>}
-                    {h.youtube > 0  && <span className="text-xs bg-red-50 text-red-500 px-2 py-0.5 rounded-full shrink-0">▶ {h.youtube}</span>}
-                    {h.tiktok > 0   && <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full shrink-0">♪ {h.tiktok}</span>}
-                    <span className="text-xs text-emerald-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">Chọn pin →</span>
-                  </button>
-                );
-              })}
+              {crawlHistory.length === 0 && !crawlHistoryLoading && (
+                <div className="text-xs text-gray-400 italic bg-gray-50 rounded-xl px-4 py-3 text-center">
+                  Chưa có lịch sử crawl. Thêm keyword vào Task Queue và chạy để crawl.
+                </div>
+              )}
+
+              {crawlHistory.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  {crawlHistory.map(h => {
+                    const total = (h.pinterest || 0) + (h.instagram || 0) + (h.tiktok || 0) + (h.youtube || 0);
+                    return (
+                      <button key={h.id} type="button"
+                        onClick={() => onNavigate?.("crawl", h.keyword, h.id, { projectId: project.id, projectName: project.name, mode: "pick-original" })}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-200 text-left text-sm hover:bg-emerald-50 hover:border-emerald-300 transition-all group">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-800 truncate group-hover:text-emerald-700">{h.keyword}</p>
+                          <p className="text-xs text-gray-400">{h.created_at?.slice(0, 16).replace("T", " ")} · {total} pins</p>
+                        </div>
+                        {h.pinterest > 0 && <span className="text-xs bg-red-50 text-red-400 px-2 py-0.5 rounded-full shrink-0">📌 {h.pinterest}</span>}
+                        {h.youtube > 0  && <span className="text-xs bg-red-50 text-red-500 px-2 py-0.5 rounded-full shrink-0">▶ {h.youtube}</span>}
+                        {h.tiktok > 0   && <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full shrink-0">♪ {h.tiktok}</span>}
+                        <span className="text-xs text-emerald-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">Chọn pin →</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </section>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Image as ImageIcon, Download, Copy, Settings, BookMarked, Clock, ImagePlus, Images, CircleX, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Send, Image as ImageIcon, Download, Copy, Settings, BookMarked, Clock, ImagePlus, Images, CircleX, PanelLeftClose, PanelLeftOpen, Sparkles } from "lucide-react";
 import { API_BASE } from "../constants";
 import { EditableTable, InlineText, MessageContent } from "../components/AttributeTable";
 

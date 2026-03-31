@@ -128,6 +128,52 @@ export default function HuntPage({ setResult, loadHistory }) {
   const [classifyingFile, setClassifyingFile] = useState(null);
   const [classifyResult, setClassifyResult] = useState(null); // {filename, rows}
 
+  // ── AI Group Search ───────────────────────────────────────────────────────
+  const [groupQuery, setGroupQuery] = useState("");
+  const [grouping, setGrouping] = useState(false);
+  const [groupResults, setGroupResults] = useState({}); // {query → {query,total,groups,saved_at}}
+  const [groupExpanded, setGroupExpanded] = useState({}); // "query::l2" → bool
+  const [groupL3Expanded, setGroupL3Expanded] = useState({}); // "query::l2::l3" → bool
+  const [groupQCollapsed, setGroupQCollapsed] = useState({}); // query → bool (collapse whole query panel)
+
+  const handleGroupSearch = async () => {
+    if (!huntDetail || !groupQuery.trim()) return;
+    setGrouping(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/etsy_hunt/history/${huntDetail.filename}/group-search`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: groupQuery.trim() }),
+        }
+      );
+      if (!res.ok) throw new Error((await res.json()).detail || "Lỗi AI");
+      const data = await res.json(); // returns full dict {query → entry}
+      setGroupResults(data);
+      // Auto-open first L2 of newly searched query
+      const q = groupQuery.trim();
+      const entry = data[q];
+      if (entry?.groups?.length > 0) {
+        setGroupExpanded((prev) => ({ ...prev, [`${q}::${entry.groups[0].group}`]: true }));
+      }
+      setGroupQCollapsed((prev) => ({ ...prev, [q]: false }));
+    } catch (e) {
+      alert(`AI Group Search thất bại: ${e.message}`);
+    } finally {
+      setGrouping(false);
+    }
+  };
+
+  const handleDeleteGroupSearch = async (query) => {
+    if (!huntDetail) return;
+    await fetch(
+      `${API_BASE}/api/etsy_hunt/history/${huntDetail.filename}/group-search/${encodeURIComponent(query)}`,
+      { method: "DELETE" }
+    );
+    setGroupResults((prev) => { const n = { ...prev }; delete n[query]; return n; });
+  };
+
   const handleClassify = async (filename) => {
     setClassifyingFile(filename);
     setClassifyResult(null);
@@ -151,6 +197,11 @@ export default function HuntPage({ setResult, loadHistory }) {
     setHuntSort({ col: "", dir: "desc" });
     setHuntSelectedRowIds(new Set());
     setClassifyResult(null);
+    setGroupResults({});
+    setGroupQuery("");
+    setGroupExpanded({});
+    setGroupL3Expanded({});
+    setGroupQCollapsed({});
     try {
       const res = await fetch(`${API_BASE}/api/etsy_hunt/history/${filename}`);
       const data = await res.json();
@@ -160,9 +211,11 @@ export default function HuntPage({ setResult, loadHistory }) {
 
       // Auto-load saved classification if exists
       const clsRes = await fetch(`${API_BASE}/api/etsy_hunt/history/${filename}/classify`);
-      if (clsRes.ok) {
-        setClassifyResult(await clsRes.json());
-      }
+      if (clsRes.ok) setClassifyResult(await clsRes.json());
+
+      // Auto-load saved group searches if exist
+      const grpRes = await fetch(`${API_BASE}/api/etsy_hunt/history/${filename}/group-search`);
+      if (grpRes.ok) setGroupResults(await grpRes.json());
     } catch (_) {}
     setHuntDetailLoading(false);
   };
@@ -417,21 +470,6 @@ export default function HuntPage({ setResult, loadHistory }) {
             <span className="ml-1.5 text-xs text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">{huntHistory.length}</span>
           )}
         </Button>
-        <button
-          type="button"
-          onClick={() => {
-            if (huntDetail) {
-              handleClassify(huntDetail.filename);
-            } else {
-              setHuntHistoryModalOpen(true);
-              loadHuntHistory();
-            }
-          }}
-          disabled={!!classifyingFile}
-          className="px-3 py-1.5 rounded-full border border-violet-300 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center gap-1"
-        >
-          {classifyingFile ? "⏳ Đang phân loại..." : "🤖 AI Classify"}
-        </button>
       </div>
 
       {/* History modal */}
@@ -496,12 +534,6 @@ export default function HuntPage({ setResult, loadHistory }) {
                             className="text-[0.68rem] px-2 py-0.5 rounded border border-sky-200 bg-sky-50 text-sky-600 hover:bg-sky-100 transition-colors no-underline cursor-pointer"
                             download
                           >CSV</a>
-                          <button
-                            type="button"
-                            onClick={() => handleClassify(item.filename)}
-                            disabled={classifyingFile === item.filename}
-                            className="text-[0.68rem] px-2 py-0.5 rounded border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                          >{classifyingFile === item.filename ? "⏳" : "🤖 AI"}</button>
                           <button
                             type="button"
                             onClick={() => deleteHuntHistory(item.filename)}
@@ -654,6 +686,31 @@ export default function HuntPage({ setResult, loadHistory }) {
                 onChange={(e) => setHuntFilter(e.target.value)}
                 className="w-44"
               />
+              {/* AI Group Search */}
+              <div className="flex items-center gap-1.5 ml-auto">
+                <Input
+                  type="text"
+                  placeholder="AI search... (e.g. cat)"
+                  value={groupQuery}
+                  onChange={(e) => setGroupQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleGroupSearch()}
+                  className="w-48"
+                  disabled={grouping}
+                />
+                <button
+                  type="button"
+                  onClick={handleGroupSearch}
+                  disabled={grouping || !groupQuery.trim()}
+                  className="px-3 py-1.5 rounded-lg bg-violet-500 text-white text-xs font-semibold hover:bg-violet-600 disabled:opacity-50 transition-colors whitespace-nowrap"
+                >
+                  {grouping ? "⏳ AI..." : "✨ AI Group"}
+                </button>
+                {Object.keys(groupResults).length > 0 && (
+                  <span className="text-xs text-violet-600 font-medium ml-1">
+                    {Object.keys(groupResults).length} saved
+                  </span>
+                )}
+              </div>
               <span className="text-xs text-gray-500">
                 Hiển thị: {huntFilteredRows.length}
                 {huntSelectedRowIds.size > 0 && (
@@ -671,14 +728,6 @@ export default function HuntPage({ setResult, loadHistory }) {
                 <span className="text-xs text-gray-500">→ {huntCrawlProgress.keyword}</span>
               )}
               <div className="ml-auto flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleClassify(huntDetail.filename)}
-                  disabled={!!classifyingFile}
-                  className="px-3 py-1.5 rounded-full border border-violet-300 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
-                >
-                  {classifyingFile === huntDetail.filename ? "⏳ Đang phân loại..." : "🤖 AI Classify"}
-                </button>
                 <a
                   href={`${API_BASE}/api/etsy_hunt/history/${huntDetail.filename}/download`}
                   className="px-3 py-1.5 rounded-full border border-gray-300 text-xs bg-gray-50 text-gray-700 hover:bg-gray-100 no-underline transition-colors"
@@ -695,6 +744,134 @@ export default function HuntPage({ setResult, loadHistory }) {
               huntDraft={huntDraft} setHuntDraft={setHuntDraft}
               huntActiveFilterCount={huntActiveFilterCount}
             />
+
+            {/* AI Group Results — one panel per saved query */}
+            {Object.keys(groupResults).length > 0 && (() => {
+              const GRP_NER_COLS = [
+                "Màu sắc", "Kích thước", "Hoa văn", "Khác",
+                "Chất liệu", "Tính năng/hiệu quả", "Đối tượng",
+                "Phong cách/kiểu dáng", "Cảnh",
+                "Từ theo mùa/sự kiện đặc biệt", "Dòng sản phẩm/mô hình bổ sung",
+              ];
+              const clsMap = {};
+              if (classifyResult) {
+                for (const r of classifyResult.rows) {
+                  if (r.keyword) clsMap[r.keyword.toLowerCase()] = r;
+                }
+              }
+              const hasClassify = classifyResult != null;
+              const allKws = Object.values(groupResults).flatMap(e => (e.groups || []).flatMap(g => (g.subgroups || []).flatMap(sg => sg.keywords || [])));
+              const firstKw = allKws[0] || {};
+              const numCols2 = Object.keys(firstKw).filter(
+                (k) => k !== "keyword" && k !== "_rowId" && firstKw[k] !== "" && !isNaN(Number(firstKw[k]))
+              );
+
+              const KwTable = ({ keywords }) => (
+                <div className="overflow-x-auto">
+                  <table className="border-collapse text-xs w-full" style={{ minWidth: hasClassify ? 1400 : 600 }}>
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="px-3 py-1.5 text-left font-medium text-gray-500 border-b border-gray-200 sticky left-0 bg-gray-50 whitespace-nowrap">#</th>
+                        <th className="px-3 py-1.5 text-left font-medium text-gray-500 border-b border-gray-200 bg-gray-50 whitespace-nowrap" style={{ position: "sticky", left: 32 }}>keyword</th>
+                        {numCols2.map((col) => (
+                          <th key={col} className="px-3 py-1.5 text-right font-medium text-gray-500 border-b border-gray-200 whitespace-nowrap">{col}</th>
+                        ))}
+                        {hasClassify && GRP_NER_COLS.map((col) => (
+                          <th key={col} className="px-3 py-1.5 text-center font-medium text-orange-600 border-b border-gray-200 whitespace-nowrap" style={{ background: "#FEF3ED" }}>{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {keywords.map((row, ri) => {
+                        const cls = clsMap[(row.keyword || "").toLowerCase()] || {};
+                        return (
+                          <tr key={ri} className={ri % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
+                            <td className={`px-3 py-1.5 border-b border-gray-100 text-gray-400 sticky left-0 ${ri % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>{ri + 1}</td>
+                            <td className={`px-3 py-1.5 border-b border-gray-100 font-medium text-gray-800 whitespace-nowrap ${ri % 2 === 0 ? "bg-white" : "bg-gray-50"}`} style={{ position: "sticky", left: 32 }}>{row.keyword || ""}</td>
+                            {numCols2.map((col) => (
+                              <td key={col} className="px-3 py-1.5 text-right border-b border-gray-100 whitespace-nowrap text-gray-600">
+                                {row[col] !== undefined && row[col] !== "" ? Number(row[col]).toLocaleString() : "—"}
+                              </td>
+                            ))}
+                            {hasClassify && GRP_NER_COLS.map((col) => (
+                              <td key={col} className="px-3 py-1.5 text-center border-b border-gray-100 whitespace-nowrap text-gray-700" style={{ background: ri % 2 === 0 ? "#fff9f6" : "#fef3ed" }}>
+                                {cls[col] || ""}
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+
+              return Object.entries(groupResults).map(([q, entry]) => {
+                const qCollapsed = !!groupQCollapsed[q];
+                return (
+                  <div key={q} className="mb-3 rounded-xl border border-violet-200 bg-violet-50/60 overflow-hidden">
+                    {/* Query header (L1) */}
+                    <div className="px-4 py-2.5 border-b border-violet-200 flex items-center gap-2">
+                      <button type="button" onClick={() => setGroupQCollapsed((p) => ({ ...p, [q]: !p[q] }))}
+                        className="flex items-center gap-2 flex-1 text-left">
+                        <span className="text-xs font-bold text-violet-700">✨ "{q}"</span>
+                        <span className="text-xs text-violet-500">{entry.total} keywords · {(entry.groups || []).length} groups</span>
+                        <span className="text-xs text-violet-400 ml-1">{qCollapsed ? "▼" : "▲"}</span>
+                      </button>
+                      <button type="button" onClick={() => handleDeleteGroupSearch(q)}
+                        className="text-xs text-gray-400 hover:text-red-500 px-1.5 transition-colors">✕</button>
+                    </div>
+                    {!qCollapsed && (
+                      <div className="divide-y divide-violet-100">
+                        {(entry.groups || []).map((l2) => {
+                          const l2Key = `${q}::${l2.group}`;
+                          const l2Open = !!groupExpanded[l2Key];
+                          return (
+                            <div key={l2Key}>
+                              <button type="button"
+                                onClick={() => setGroupExpanded((p) => ({ ...p, [l2Key]: !p[l2Key] }))}
+                                className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-violet-100/60 transition-colors text-left"
+                              >
+                                <span className="text-base">{l2.icon}</span>
+                                <span className="text-sm font-bold text-gray-800">{l2.group}</span>
+                                <span className="text-xs text-gray-400 ml-1">({l2.count} · {(l2.subgroups || []).length} subgroups)</span>
+                                <span className="ml-auto text-gray-400 text-xs">{l2Open ? "▲" : "▼"}</span>
+                              </button>
+                              {l2Open && (
+                                <div className="border-t border-violet-100 bg-white">
+                                  {(l2.subgroups || []).map((l3) => {
+                                    const l3Key = `${q}::${l2.group}::${l3.group}`;
+                                    const l3Open = !!groupL3Expanded[l3Key];
+                                    return (
+                                      <div key={l3Key} className="border-b border-gray-100 last:border-0">
+                                        <button type="button"
+                                          onClick={() => setGroupL3Expanded((p) => ({ ...p, [l3Key]: !p[l3Key] }))}
+                                          className="w-full flex items-center gap-2 pl-8 pr-4 py-2 hover:bg-gray-50 transition-colors text-left"
+                                        >
+                                          <span className="text-sm">{l3.icon}</span>
+                                          <span className="text-xs font-semibold text-gray-700">{l3.group}</span>
+                                          <span className="text-xs text-gray-400 ml-1">({l3.count})</span>
+                                          <span className="ml-auto text-gray-400 text-xs">{l3Open ? "▲" : "▼"}</span>
+                                        </button>
+                                        {l3Open && (
+                                          <div className="pl-8 pb-2">
+                                            <KwTable keywords={l3.keywords || []} />
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
 
             {/* Table */}
             <div className="overflow-x-auto rounded-lg border border-gray-200">

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { API_BASE } from "../constants";
 import { Button } from "../components/ui/button";
-import BrowserStreamModal from "../components/BrowserStreamModal";
 
 function getTagSourceLabel(source) {
   if (source === "req1") return "REQ1";
@@ -69,7 +68,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
   const [selectedCsvFile, setSelectedCsvFile] = useState("");
 
   // HEnull (used when embedded)
-  const [browserModalOpen, setBrowserModalOpen] = useState(false);
+  const [openingHenull, setOpeningHenull] = useState(false);
   const [henullMsg, setHenullMsg] = useState("");
   const [henullWatching, setHenullWatching] = useState(false);
   const [henullCrawling, setHenullCrawling] = useState(false);
@@ -291,19 +290,23 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
 
   const handleOpenHenull = async () => {
     if (!projectId) return;
-    try {
-      const h = await fetch(`${API_BASE}/api/etsy_hunt/history?project_id=${projectId}`);
-      const list = await h.json();
-      henullPollRef.current.lastSeenNewest = list?.[0]?.filename ?? null;
-    } catch (_) {}
+    setOpeningHenull(true);
     setHenullMsg("");
-    setBrowserModalOpen(true);
-  };
-
-  const handleBrowserCaptured = ({ mode }) => {
-    setBrowserModalOpen(false);
-    setHenullMsg(`✅ Đã bắt được API (${mode}). Đang crawl dữ liệu...`);
-    setHenullWatching(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/final/open-henull`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).detail || "Lỗi mở HEnull");
+      setHenullMsg("✅ Browser đã mở trên VPS. Đăng nhập HEnull → search keyword để bắt đầu crawl.");
+      try {
+        const h = await fetch(`${API_BASE}/api/etsy_hunt/history?project_id=${projectId}`);
+        const list = await h.json();
+        henullPollRef.current.lastSeenNewest = list?.[0]?.filename ?? null;
+      } catch (_) {}
+      setHenullWatching(true);
+    } catch (e) {
+      setHenullMsg(`❌ ${e.message}`);
+    } finally {
+      setOpeningHenull(false);
+    }
   };
 
   useEffect(() => {
@@ -767,19 +770,11 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
           {/* HEnull controls */}
           <div className="px-4 py-3 border-b border-gray-100 shrink-0 flex flex-col gap-2">
             <button
-              type="button" onClick={handleOpenHenull}
-              className="w-full px-3 py-2 rounded-lg bg-violet-500 text-white text-xs font-semibold hover:bg-violet-600 transition-colors"
+              type="button" onClick={handleOpenHenull} disabled={openingHenull}
+              className="w-full px-3 py-2 rounded-lg bg-violet-500 text-white text-xs font-semibold hover:bg-violet-600 disabled:opacity-50 transition-colors"
             >
-              🌐 Mở HEnull
+              {openingHenull ? "⏳ Đang mở..." : "🌐 Mở HEnull"}
             </button>
-
-            <BrowserStreamModal
-              open={browserModalOpen}
-              mode="keyword"
-              projectId={projectId}
-              onCaptured={handleBrowserCaptured}
-              onClose={() => setBrowserModalOpen(false)}
-            />
             {henullWatching && (
               <span className={`text-[11px] font-semibold px-2 py-1 rounded-full text-center ${
                 henullCrawling ? "bg-amber-100 text-amber-700 animate-pulse" : "bg-gray-100 text-gray-500"

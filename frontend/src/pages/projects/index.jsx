@@ -133,6 +133,7 @@ export default function ProjectsPage({
             </div>
           ) : activePhase === "original" ? (
             <OriginalPhase
+              key={selected.id}
               project={selected}
               saveProject={saveProject}
               onAddTaskToQueue={onAddTaskToQueue}
@@ -140,6 +141,7 @@ export default function ProjectsPage({
             />
           ) : activePhase === "redesign" ? (
             <RedesignPhase
+              key={selected.id}
               project={selected}
               saveProject={saveProject}
               onAddTaskToQueue={onAddTaskToQueue}
@@ -148,6 +150,7 @@ export default function ProjectsPage({
             />
           ) : (
             <FinalPhase
+              key={selected.id}
               project={selected}
               saveProject={saveProject}
             />

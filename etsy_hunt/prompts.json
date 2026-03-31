@@ -1,20 +1,23 @@
 {
+  "group_keywords": {
+    "prompt_template": "You are an expert Etsy keyword analyst.\n\nThe user is researching the concept \"{query}\". This is the Level 1 (top-level) group.\n\nYou are given a list of Etsy keywords (with NER attributes if available).\n\nYour task:\n1. Include keywords that are directly related OR semantically related to \"{query}\" — this includes synonyms, subtypes, breeds, nicknames, related animals/objects, and branded variants (e.g. for \"cat\": kitty, kitten, feline, jellycat, bobcat, catdragon are all relevant). Skip only keywords that are completely unrelated.\n2. Create Level 2 groups — broad semantic clusters (product type, main theme, etc.)\n3. Within each Level 2 group, create Level 3 subgroups — finer distinctions (style, audience, occasion, color, material, specific variant, etc.)\n4. Each keyword must appear in exactly one Level 3 subgroup\n\nReturn ONLY a JSON array with this structure:\n[\n  {\n    \"group\": \"Level 2 Group Name (English, concise)\",\n    \"icon\": \"single emoji\",\n    \"subgroups\": [\n      {\n        \"group\": \"Level 3 Group Name (English, concise)\",\n        \"icon\": \"single emoji\",\n        \"keywords\": [\"keyword1\", \"keyword2\"]\n      }\n    ]\n  }\n]\n\nRules:\n- Level 2: 2 to 6 groups based on product type or main concept\n- Level 3: 2 to 5 subgroups per Level 2, based on style/audience/occasion/variant\n- If a Level 2 group has fewer than 3 keywords total, put them all in one Level 3 subgroup named \"General\"\n- Group names must be in English\n- No explanation, return only the JSON array\n\nKeywords:\n{keywords_list}"
+  },
   "classify_keywords": {
-    "role": "Bạn là chuyên gia phân tích từ khóa Etsy.",
-    "task": "Phân tích từng keyword và trích xuất các thành phần NER.",
+    "role": "You are an expert Etsy keyword analyst.",
+    "task": "Analyze each keyword and extract NER components.",
     "categories": {
-      "Màu sắc": "màu sắc (blue, red, pastel...)",
-      "Kích thước": "kích thước, số đo (large, 12 inch, king size...)",
-      "Hoa văn": "họa tiết, pattern (floral, striped, plaid...)",
-      "Khác": "biến thể khác không thuộc 3 nhóm trên",
-      "Chất liệu": "vật liệu (cotton, wool, leather...)",
-      "Tính năng/hiệu quả": "công dụng, chức năng (waterproof, personalized...)",
-      "Đối tượng": "đối tượng sử dụng (baby, women, men, kids...)",
-      "Phong cách/kiểu dáng": "phong cách (boho, vintage, minimalist...)",
-      "Cảnh": "bối cảnh (outdoor, nursery, wedding...)",
-      "Từ theo mùa/sự kiện đặc biệt": "mùa/sự kiện (Christmas, summer, birthday...)",
-      "Dòng sản phẩm/mô hình bổ sung": "tên sản phẩm chính (blanket, mug, tote bag...)"
+      "Color": "colors (blue, red, pastel...)",
+      "Size": "dimensions, measurements (large, 12 inch, king size...)",
+      "Pattern": "patterns, motifs (floral, striped, plaid...)",
+      "Other": "other variants not in the above 3 groups",
+      "Material": "materials (cotton, wool, leather...)",
+      "Feature/Function": "use cases, functions (waterproof, personalized...)",
+      "Target Audience": "target users (baby, women, men, kids...)",
+      "Style": "style, design type (boho, vintage, minimalist...)",
+      "Scene/Occasion": "context, setting (outdoor, nursery, wedding...)",
+      "Season/Event": "seasonal or special events (Christmas, summer, birthday...)",
+      "Product Line": "main product name (blanket, mug, tote bag...)"
     },
-    "prompt_template": "Bạn là chuyên gia phân tích từ khóa Etsy. Phân tích từng keyword và trích xuất các thành phần NER.\n\nCác nhóm cần phân loại:\n- Màu sắc: màu sắc (blue, red, pastel...)\n- Kích thước: kích thước, số đo (large, 12 inch, king size...)\n- Hoa văn: họa tiết, pattern (floral, striped, plaid...)\n- Khác: biến thể khác không thuộc 3 nhóm trên\n- Chất liệu: vật liệu (cotton, wool, leather...)\n- Tính năng/hiệu quả: công dụng, chức năng (waterproof, personalized...)\n- Đối tượng: đối tượng sử dụng (baby, women, men, kids...)\n- Phong cách/kiểu dáng: phong cách (boho, vintage, minimalist...)\n- Cảnh: bối cảnh (outdoor, nursery, wedding...)\n- Từ theo mùa/sự kiện đặc biệt: mùa/sự kiện (Christmas, summer, birthday...)\n- Dòng sản phẩm/mô hình bổ sung: tên sản phẩm chính (blanket, mug, tote bag...)\n\nTrả về JSON array, mỗi phần tử:\n{\"keyword\":\"...\",\"Màu sắc\":\"\",\"Kích thước\":\"\",\"Hoa văn\":\"\",\"Khác\":\"\",\"Chất liệu\":\"\",\"Tính năng/hiệu quả\":\"\",\"Đối tượng\":\"\",\"Phong cách/kiểu dáng\":\"\",\"Cảnh\":\"\",\"Từ theo mùa/sự kiện đặc biệt\":\"\",\"Dòng sản phẩm/mô hình bổ sung\":\"\"}\n\nChỉ trả về JSON array, không giải thích thêm.\n\nKeywords:\n{keywords_list}"
+    "prompt_template": "You are an expert Etsy keyword analyst. Analyze each keyword and extract NER components.\n\nCategories to classify:\n- Màu sắc: colors (blue, red, pastel...)\n- Kích thước: dimensions, measurements (large, 12 inch, king size...)\n- Hoa văn: patterns, motifs (floral, striped, plaid...)\n- Khác: other variants not in the above 3 groups\n- Chất liệu: materials (cotton, wool, leather...)\n- Tính năng/hiệu quả: use cases, functions (waterproof, personalized...)\n- Đối tượng: target users (baby, women, men, kids...)\n- Phong cách/kiểu dáng: style, design type (boho, vintage, minimalist...)\n- Cảnh: context, setting (outdoor, nursery, wedding...)\n- Từ theo mùa/sự kiện đặc biệt: seasonal or special events (Christmas, summer, birthday...)\n- Dòng sản phẩm/mô hình bổ sung: main product name (blanket, mug, tote bag...)\n\nReturn a JSON array, each element:\n{\"keyword\":\"...\",\"Màu sắc\":\"\",\"Kích thước\":\"\",\"Hoa văn\":\"\",\"Khác\":\"\",\"Chất liệu\":\"\",\"Tính năng/hiệu quả\":\"\",\"Đối tượng\":\"\",\"Phong cách/kiểu dáng\":\"\",\"Cảnh\":\"\",\"Từ theo mùa/sự kiện đặc biệt\":\"\",\"Dòng sản phẩm/mô hình bổ sung\":\"\"}\n\nReturn only the JSON array, no explanation.\n\nKeywords:\n{keywords_list}"
   }
 }
