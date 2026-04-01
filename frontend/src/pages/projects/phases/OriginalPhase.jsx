@@ -222,6 +222,7 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
   const [crawling, setCrawling] = useState(false);
   const [stagedKeywords, setStagedKeywords] = useState([]);
   const [generatingKeywords, setGeneratingKeywords] = useState(false);
+  const [visibleEtsyCount, setVisibleEtsyCount] = useState(5);
 
   const original_item = original.original_item || null;
   const hunt_keywords = original.hunt_keywords || [];
@@ -400,29 +401,53 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
       {/* ── Etsy product list ── */}
       {etsy_products.length > 0 && !original_item && (
         <section className="flex flex-col gap-3">
-          <h3 className="text-sm font-bold text-gray-700">Sản phẩm Etsy — chọn để crawl social</h3>
-          <p className="text-xs text-gray-500">Top {etsy_products.length} sản phẩm bán chạy — chọn để crawl social:</p>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-700">Sản phẩm Etsy nổi bật</h3>
+            {etsy_products.length > 5 && (
+              <button
+                type="button"
+                onClick={() => setVisibleEtsyCount(v => v === 5 ? etsy_products.length : 5)}
+                className="text-xs font-semibold text-sky-600 hover:text-sky-700 bg-sky-50 px-3 py-1.5 rounded-full transition-colors"
+              >
+                {visibleEtsyCount === 5 ? `Xem tất cả ${etsy_products.length}` : "Thu gọn"}
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">Chọn sản phẩm bạn muốn để AI tạo bộ từ khoá và crawl mạng xã hội (Pinterest, IG...):</p>
           <div className="flex flex-col gap-2">
-            {etsy_products.map((p, i) => {
+            {etsy_products.slice(0, visibleEtsyCount).map((p, i) => {
               const pid = p.id || p.product_id || p.title;
               const checked = selectedEtsyIds.has(pid);
               return (
-                <label key={i} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${checked ? "border-sky-400 bg-sky-50" : "border-gray-200 hover:bg-gray-50"}`}>
+                <label key={i} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${checked ? "border-sky-400 bg-sky-50 shadow-sm ring-1 ring-sky-100" : "border-gray-200 hover:bg-gray-50"}`}>
                   <input type="checkbox" checked={checked} className="accent-sky-500 w-4 h-4 shrink-0" onChange={() => {
                     setSelectedEtsyIds(prev => { const next = new Set(prev); checked ? next.delete(pid) : next.add(pid); return next; });
                   }} />
-                  {p.image && <img src={p.image} alt="" className="w-12 h-12 object-cover rounded-lg shrink-0" />}
+                  {p.image ? (
+                    <img src={p.image} alt="" className="w-14 h-14 object-cover rounded-lg shrink-0 border border-gray-100 shadow-sm" />
+                  ) : (
+                    <div className="w-14 h-14 bg-gray-100 rounded-lg shrink-0 flex items-center justify-center text-gray-400 text-xs">No img</div>
+                  )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{p.title || p.name || "Product"}</p>
-                    <p className="text-xs text-gray-400">
-                      {p.monthly_sales && `Sales/tháng: ${p.monthly_sales}`}
-                      {p.price && ` · $${p.price}`}
-                      {p.favorites && ` · ❤ ${p.favorites}`}
-                    </p>
+                    <p className={`text-sm font-semibold truncate ${checked ? "text-sky-900" : "text-gray-800"}`}>{p.title || p.name || "Product"}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                      {p.monthly_sales && <span className="flex items-center gap-1">📈 {p.monthly_sales}/mo</span>}
+                      {p.price && <span className="font-medium text-gray-700">${parseFloat(p.price).toFixed(2)}</span>}
+                      {p.favorites && <span className="flex items-center gap-1">❤️ {p.favorites}</span>}
+                    </div>
                   </div>
                 </label>
               );
             })}
+            
+            {visibleEtsyCount === 5 && etsy_products.length > 5 && (
+              <div className="flex justify-center mt-1">
+                 <button type="button" onClick={() => setVisibleEtsyCount(etsy_products.length)} className="text-xs text-gray-400 font-medium hover:text-sky-600">
+                    +{etsy_products.length - 5} sản phẩm khác...
+                 </button>
+              </div>
+            )}
+
             {stagedKeywords.length === 0 ? (
               <button type="button" onClick={handlePrepareCrawl}
                 disabled={selectedEtsyIds.size === 0 || generatingKeywords}

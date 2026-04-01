@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useTransition } from "react";
 import { API_BASE } from "./constants";
 import CrawlPage from "./pages/CrawlPage";
 import HuntPage from "./pages/HuntPage";
@@ -110,9 +110,25 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
   const [projLoading, setProjLoading] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [loadingProjectId, setLoadingProjectId] = useState(null);
   const selectedProjectIdRef = useRef(null);
   const projectCacheRef = useRef(new Map()); // id → full project data
   const prevQueueRef = useRef([]);
+
+  const [isPending, startTransition] = useTransition();
+
+  const handleSelectProject = useCallback((id) => {
+    // Immediate sidebar highlight — must be outside startTransition
+    setSelectedProjectId(id);
+    // Deferred heavy content swap — keep isPending spinner while React renders
+    startTransition(() => {
+      if (!id) {
+        setSelectedProject(null);
+      } else if (projectCacheRef.current.has(id)) {
+        setSelectedProject(projectCacheRef.current.get(id));
+      }
+    });
+  }, []);
 
   // Queue state (synced from server)
   const [queue, setQueue] = useState([]);
@@ -141,15 +157,23 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
     // Serve cached version instantly, then refresh in background
     if (projectCacheRef.current.has(id)) {
       setSelectedProject(projectCacheRef.current.get(id));
+    } else {
+      // No cache → clear stale data immediately so old project never shows for new id
+      setSelectedProject(null);
+      setLoadingProjectId(id);
     }
     try {
       const res = await fetch(`${API_BASE}/api/projects/${id}`);
       if (res.ok) {
         const data = await res.json();
         projectCacheRef.current.set(id, data);
-        setSelectedProject(data);
+        // Only update if this id is still the one being requested
+        if (selectedProjectIdRef.current === id) {
+          setSelectedProject(data);
+        }
       }
     } catch (e) { console.error(e); }
+    finally { setLoadingProjectId(null); }
   }, []);
 
   // When selected project changes, do NOT null out — swap when ready to avoid blank flash
@@ -459,7 +483,7 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
             <HuntPage setResult={setResult} loadHistory={loadHistory} />
           ) : activeTab === "projects" ? (
             <ErrorBoundary>
-              <ProjectsPage onNavigate={handleNavigate} projects={projects} setProjects={setProjects} loading={projLoading} selectedId={selectedProjectId} setSelectedId={setSelectedProjectId} selectedProject={selectedProject} saveProject={saveProject} queue={queue} setQueue={setQueue} onAddTaskToQueue={addToQueue} />
+              <ProjectsPage isPending={isPending} onNavigate={handleNavigate} projects={projects} setProjects={setProjects} loading={projLoading} selectedId={selectedProjectId} setSelectedId={handleSelectProject} selectedProject={selectedProject} saveProject={saveProject} queue={queue} setQueue={setQueue} onAddTaskToQueue={addToQueue} loadingProjectId={loadingProjectId} />
             </ErrorBoundary>
           ) : activeTab === "main-image" ? (
             <MainImagePage />

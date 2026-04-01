@@ -190,8 +190,6 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
     setHistoryLoading(false);
   }, [project.id]);
 
-  useEffect(() => { loadCrawlHistory(); }, [loadCrawlHistory]);
-
   // ── Reference images ─────────────────────────────────────────────────────────
   const [refImages, setRefImages] = useState([]);
 
@@ -223,6 +221,7 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
 
   // ── Chat (persisted) ─────────────────────────────────────────────────────────
   const [messages, setMessages] = useState([]);
+  const [chatLoading, setChatLoading] = useState(false);
   const chatBottomRef = useRef(null);
 
   const saveMessages = useCallback(async (msgs) => {
@@ -244,10 +243,14 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
   }, [saveMessages]);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/projects/${project.id}/redesign/chat`)
+    const controller = new AbortController();
+    setChatLoading(true);
+    fetch(`${API_BASE}/api/projects/${project.id}/redesign/chat`, { signal: controller.signal })
       .then(r => r.ok ? r.json() : { messages: [] })
       .then(data => setMessages(data.messages || []))
-      .catch(() => {});
+      .catch(e => { if (e.name !== "AbortError") console.error(e); })
+      .finally(() => setChatLoading(false));
+    return () => controller.abort();
   }, [project.id]);
 
   useEffect(() => {
@@ -492,7 +495,12 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
 
         {/* ─── Chat log ─────────────────────────────────────────────────────── */}
         <div className="flex-1 px-6 py-5 flex flex-col gap-5">
-          {messages.length === 0 && !isGettingAttributes && (
+          {chatLoading ? (
+            <div className="flex items-center justify-center py-16 gap-2 text-violet-400">
+              <Loader2 size={18} className="animate-spin" />
+              <span className="text-sm font-medium">Loading chat history...</span>
+            </div>
+          ) : messages.length === 0 && !isGettingAttributes && (
             <div className="flex flex-col items-center justify-center py-16 text-center text-gray-300 gap-3">
               <Sparkles size={32} className="text-violet-200" />
               <p className="text-sm font-semibold text-gray-400">No sessions yet</p>
