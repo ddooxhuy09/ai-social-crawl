@@ -4,10 +4,9 @@ import { API_BASE } from "../../../constants";
 import HistoryPickerModal from "../../../components/HistoryPickerModal";
 import { MessageContent } from "../../../components/AttributeTable";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function makeMsg(type, payload) {
-  return { id: crypto.randomUUID(), type, created_at: new Date().toISOString(), ...payload };
+  const genId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+  return { id: genId, type, created_at: new Date().toISOString(), ...payload };
 }
 
 function StepBadge({ n, label, active }) {
