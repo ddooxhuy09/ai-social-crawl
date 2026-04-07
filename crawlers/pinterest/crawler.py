@@ -214,6 +214,12 @@ async def open_pinterest_with_keyword(
         pin_infos: list[dict] = []
         related_debug: dict[str, list[str]] = {}
 
+        import math
+        # Tạo ngưỡng động (Dynamic Threshold) để cân bằng thời gian và kết quả
+        phase1_limit = max(1, math.ceil(math.sqrt(max_pins)))
+        phase2_limit = max(1, math.ceil(max_pins / phase1_limit))
+        print(f"📊 Dynamic Threshold (Limit={max_pins}): Lấy tối đa {phase1_limit} seed pins, mỗi seed lấy {phase2_limit} related pins.")
+
         if all_pin_ids:
             if mode in ("saves", "repins"):
                 # ── Filter mode ───────────────────────────────────────────────
@@ -241,6 +247,9 @@ async def open_pinterest_with_keyword(
                     if int(info.get(threshold_field) or 0) >= threshold_val:
                         filtered_seed_infos.append(info)
                         filtered_seed_ids.append(str(pid))
+                        if len(filtered_seed_ids) >= phase1_limit:
+                            print(f"   🛑 Đã đủ {phase1_limit} seed pins pass điều kiện.")
+                            break
                 print(f"✅ Phase 2a: {len(filtered_seed_ids)}/{len(all_pin_ids)} seeds pass (>= {threshold_val})")
 
                 print("🔁 Phase 2b: RelatedModulesResource cho seeds đã pass...")
@@ -249,7 +258,7 @@ async def open_pinterest_with_keyword(
                     await asyncio.sleep(random.uniform(0.6, 0.8))
                     try:
                         related_ids = await fetch_related_pins_via_page(
-                            page, pid, pws_ctx, max_related=50, search_query=keyword,
+                            page, pid, pws_ctx, max_related=phase2_limit, search_query=keyword,
                         )
                     except Exception as exc:
                         print(f"⚠️ Lỗi RelatedModulesResource cho pin {pid}: {exc}")
@@ -261,8 +270,9 @@ async def open_pinterest_with_keyword(
 
                 fetched_ids = set(filtered_seed_ids)
                 unique_related_ids = list(dict.fromkeys(r for r in all_related_ids if r not in fetched_ids))
+                
                 total_related = len(unique_related_ids)
-                print(f"📋 Phase 3: {total_related} related pins cần fetch...")
+                print(f"📋 Phase 3: {total_related} related pins cần fetch.")
                 fetched_related = 0
                 for pid in unique_related_ids:
                     await asyncio.sleep(random.uniform(0.4, 1.5))
@@ -280,13 +290,14 @@ async def open_pinterest_with_keyword(
 
             else:
                 # ── Default mode ──────────────────────────────────────────────
-                print("🔁 Phase 2: Gọi RelatedModulesResource cho từng pin để lấy pin ids liên quan...")
+                seed_for_related = all_pin_ids[:phase1_limit]
+                print(f"🔁 Phase 2: Gọi Related API cho {len(seed_for_related)} seed pins...")
                 all_related_ids: list[str] = []
-                for pid in all_pin_ids:
+                for pid in seed_for_related:
                     await asyncio.sleep(random.uniform(0.6, 0.8))
                     try:
                         related_ids = await fetch_related_pins_via_page(
-                            page, pid, pws_ctx, max_related=50, search_query=keyword,
+                            page, pid, pws_ctx, max_related=phase2_limit, search_query=keyword,
                         )
                     except Exception as exc:
                         print(f"⚠️ Lỗi RelatedModulesResource cho pin {pid}: {exc}")
@@ -296,9 +307,18 @@ async def open_pinterest_with_keyword(
                         related_debug[str(pid)] = rel_ids
                         all_related_ids.extend(rel_ids)
 
-                unique_pin_ids: list[str] = list(dict.fromkeys(all_pin_ids + all_related_ids))
+                # Gom Seed (đã lấy related) + Related
+                target_ids = list(dict.fromkeys(seed_for_related + all_related_ids))
+                # Bù danh sách nếu thiếu để cho đạt tối thiểu max_pins
+                for pid in all_pin_ids:
+                    if len(target_ids) >= max_pins:
+                        break
+                    if pid not in target_ids:
+                        target_ids.append(pid)
+
+                unique_pin_ids: list[str] = target_ids
                 total_details = len(unique_pin_ids)
-                print(f"📋 Phase 3: Tổng {total_details} pin id (sau khi bỏ trùng).")
+                print(f"📋 Phase 3: Tổng {total_details} pin id cần fetch details.")
 
                 print("🔎 Phase 4: Gọi PinResource/get cho từng pin id...")
                 fetched_details = 0

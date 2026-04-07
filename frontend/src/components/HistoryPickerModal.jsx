@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { API_BASE, SORT_OPTIONS, matchesSource } from "../constants";
+import { PinStats } from "./PinCard";
 
 const SOURCE_OPTIONS = [
   { value: "", label: "Tất cả nguồn" },
@@ -189,7 +190,7 @@ export default function HistoryPickerModal({ historyId, historyKeyword, selected
             <div className="text-sm text-gray-400 text-center py-8">Không có ảnh phù hợp.</div>
           )}
           {!loading && !error && displayPins.length > 0 && (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
               {displayPins.map((pin, idx) => {
                 const selected = isSelected(pin);
                 const sIdx = selIndex(pin);
@@ -198,46 +199,55 @@ export default function HistoryPickerModal({ historyId, historyKeyword, selected
                     key={`${pin.source}-${pin.image_url}-${idx}`}
                     type="button"
                     onClick={() => onTogglePin(pin)}
-                    className={`relative rounded-xl overflow-hidden border-2 transition-all text-left group ${
+                    className={`relative flex flex-col rounded-xl overflow-hidden border-2 transition-all text-left bg-white group ${
                       selected
                         ? "border-sky-500 ring-2 ring-sky-200 shadow-md"
                         : "border-transparent hover:border-gray-300 hover:shadow-sm"
                     }`}
                   >
-                    {/* Image */}
-                    <div className="aspect-square bg-gray-100">
-                      <img
-                        src={pin.image_url}
-                        alt={pin.title || ""}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
+                    <div className="relative w-full aspect-square shrink-0">
+                      {/* Image */}
+                      <div className="absolute inset-0 bg-gray-100">
+                        <img
+                          src={pin.image_url}
+                          alt={pin.title || ""}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+
+                      {/* Selection overlay */}
+                      {selected && (
+                        <div className="absolute inset-0 bg-sky-500/20 flex items-start justify-end p-1.5 z-10">
+                          <span className="w-6 h-6 rounded-full bg-sky-500 text-white text-xs font-bold flex items-center justify-center shadow">
+                            {sIdx + 1}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Hover overlay (unselected) */}
+                      {!selected && (
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-start justify-end p-1.5 z-10">
+                          <span className="w-6 h-6 rounded-full bg-white/80 text-gray-500 text-xs font-bold flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity">
+                            +
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Source badge */}
+                      {pin.source && (
+                        <div className="absolute bottom-0 left-0 right-0 px-2 py-1 bg-gradient-to-t from-black/50 to-transparent z-10">
+                          <p className="text-white text-[10px] truncate">{pin.title || pin.source}</p>
+                        </div>
+                      )}
                     </div>
-
-                    {/* Selection overlay */}
-                    {selected && (
-                      <div className="absolute inset-0 bg-sky-500/20 flex items-start justify-end p-1.5">
-                        <span className="w-6 h-6 rounded-full bg-sky-500 text-white text-xs font-bold flex items-center justify-center shadow">
-                          {sIdx + 1}
-                        </span>
+                    
+                    {/* Parameters info */}
+                    <div className="px-2.5 py-2 flex flex-col gap-1 w-full flex-1">
+                      <div className="flex flex-wrap gap-0.5">
+                        <PinStats pin={pin} />
                       </div>
-                    )}
-
-                    {/* Hover overlay (unselected) */}
-                    {!selected && (
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-start justify-end p-1.5">
-                        <span className="w-6 h-6 rounded-full bg-white/80 text-gray-500 text-xs font-bold flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity">
-                          +
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Source badge */}
-                    {pin.source && (
-                      <div className="absolute bottom-0 left-0 right-0 px-2 py-1 bg-gradient-to-t from-black/50 to-transparent">
-                        <p className="text-white text-[10px] truncate">{pin.title || pin.source}</p>
-                      </div>
-                    )}
+                    </div>
                   </button>
                 );
               })}

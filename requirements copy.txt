@@ -1,0 +1,16 @@
+# Backend dependencies
+fastapi
+supabase
+python-dotenv
+uvicorn
+pydantic
+python-multipart
+Pillow
+# sentence-transformers
+# torch
+# open-clip-torch
+# transformers
+google-genai
+python-docx
+pypdf
+httpx

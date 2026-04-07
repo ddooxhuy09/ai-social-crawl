@@ -169,7 +169,13 @@ export default function ChatCreateImagePage() {
 
   const handleSaveTable = (msgId, newText, newConcepts) => {
     setMessages((prev) => {
-      const updated = prev.map((m) => m.id === msgId ? { ...m, text: newText, concepts: newConcepts || m.concepts } : m);
+      const updated = prev.map((m) => {
+        if (m.id !== msgId) return m;
+        // Nếu newText là null (chỉ update concepts), giữ nguyên rows/text
+        if (newText === null) return { ...m, concepts: newConcepts || m.concepts };
+        // Nếu save markdown, clear rows để dùng markdown path
+        return { ...m, text: newText, rows: undefined, image_names: undefined, concepts: newConcepts || m.concepts };
+      });
       saveCurrentSession(updated);
       return updated;
     });
@@ -498,7 +504,7 @@ export default function ChatCreateImagePage() {
       setMessages((prev) => {
         const updated = prev.map((m) =>
           m.id === loadingId
-            ? { ...m, text: data.caption, images: [], pending: false }
+            ? { ...m, rows: data.rows, image_names: data.image_names, text: null, images: [], pending: false }
             : m
         );
         saveCurrentSession(updated);

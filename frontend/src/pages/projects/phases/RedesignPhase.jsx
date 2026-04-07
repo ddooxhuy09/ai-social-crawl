@@ -3,6 +3,7 @@ import { Loader2, Sparkles, Image as ImageIcon, Search } from "lucide-react";
 import { API_BASE } from "../../../constants";
 import HistoryPickerModal from "../../../components/HistoryPickerModal";
 import { MessageContent } from "../../../components/AttributeTable";
+import ManualUploadModal from "../../../components/ManualUploadModal";
 
 function makeMsg(type, payload) {
   const genId = Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -37,23 +38,17 @@ function ChatRequestMsg({ msg }) {
           <p className="text-sm font-medium">"{msg.description}"</p>
         )}
         <div className="flex flex-wrap gap-1.5">
-          {msg.images?.map((img, i) => (
-            <a
-              key={i}
-              href={img.image_url}
-              target="_blank"
-              rel="noreferrer"
-              className="relative group/img block"
-              title="Click to open · Right-click to copy image"
-            >
-              <img
-                src={img.image_url}
-                alt=""
-                className={`w-14 h-14 object-cover rounded-lg border-2 transition-opacity group-hover/img:opacity-80 ${img.isMain ? "border-yellow-300" : "border-violet-300"}`}
-              />
-              <span className={`absolute top-0 left-0 text-[8px] font-bold px-0.5 rounded-br text-white ${img.isMain ? "bg-yellow-500" : "bg-violet-400"}`}>
-                {img.isMain ? "Main" : `Ref${i}`}
-              </span>
+            {msg.images?.map((img, i) => {
+              const url = img.image_url || "";
+              let label = url.startsWith("data:") ? (img.title || (img.isMain ? "Main" : `Ref${i}`)) : (url.split("/").pop()?.split("?")[0] || (img.isMain ? "Main" : `Ref${i}`));
+              if (label.length > 15) label = label.substring(0, 12) + "...";
+              
+              return (
+              <a key={i} href={img.image_url} target="_blank" rel="noreferrer" className="relative group/img block" title="Click to open · Right-click to copy image">
+                <img src={img.image_url} alt="" className={`w-14 h-14 object-cover rounded-lg border-2 transition-opacity group-hover/img:opacity-80 ${img.isMain ? "border-yellow-300" : "border-violet-300"}`} />
+                <span className={`absolute top-0 left-0 text-[8px] font-bold px-0.5 rounded-br text-white max-w-full truncate ${img.isMain ? "bg-yellow-500" : "bg-violet-400"}`}>
+                  {label}
+                </span>
               {/* Copy URL button */}
               <button
                 type="button"
@@ -64,7 +59,8 @@ function ChatRequestMsg({ msg }) {
                 ⎘
               </button>
             </a>
-          ))}
+            );
+          })}
         </div>
         <p className="text-[10px] text-violet-300 text-right">{msg.created_at?.slice(0, 16).replace("T", " ")}</p>
       </div>
@@ -82,7 +78,7 @@ function ChatAttributeMsg({ msg, onGenerateNewDesign, isBuilding }) {
       </div>
       <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
         <MessageContent
-          msg={{ text: msg.text, concepts: msg.concepts || [] }}
+          msg={{ ...msg, concepts: msg.concepts || [] }}
           onGenerateNewDesign={onGenerateNewDesign}
         />
       </div>
@@ -191,6 +187,17 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
 
   // ── Reference images ─────────────────────────────────────────────────────────
   const [refImages, setRefImages] = useState([]);
+  const [manualUploadOpen, setManualUploadOpen] = useState(false);
+
+  const handleManualUploadConfirm = (items) => {
+    items.forEach(item => {
+      setRefImages(prev => {
+        const exists = prev.find(p => p.image_url === item.image_url);
+        if (exists) return prev;
+        return [...prev, item];
+      });
+    });
+  };
 
   const toggleRefImage = (pin) => {
     setRefImages(prev => {
@@ -202,15 +209,17 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
 
   // ── Manual keyword add ───────────────────────────────────────────────────────
   const [manualKeyword, setManualKeyword] = useState("");
+  const [crawlLimit, setCrawlLimit] = useState("");
   const [addingManual, setAddingManual] = useState(false);
 
   const handleAddManual = async () => {
     const kw = manualKeyword.trim();
     if (!kw) return;
     setAddingManual(true);
+    const limit = crawlLimit ? parseInt(crawlLimit) : undefined;
     try {
       await onAddTaskToQueue(
-        { id: `manual-${Date.now()}`, title: `Crawl: ${kw}`, linked_page: "crawl", linked_keyword: kw, status: "todo" },
+        { id: `manual-${Date.now()}`, title: `Crawl: ${kw}`, linked_page: "crawl", linked_keyword: kw, limit_per_source: limit, status: "todo" },
         project.id, project.name, "redesign"
       );
       setManualKeyword("");
@@ -263,13 +272,32 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
   const [aiError, setAiError] = useState("");
 
   const fetchImagesViaProxy = async (urls) => {
-    const r = await fetch(`${API_BASE}/api/proxy-images`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ urls }),
+    // Split: data URLs are already base64, only proxy-fetch real URLs
+    const results = new Array(urls.length);
+    const remoteIndices = [];
+    const remoteUrls = [];
+    urls.forEach((url, i) => {
+      if (url.startsWith("data:")) {
+        // Already base64 data URL — extract the base64 portion for the API
+        results[i] = url.split(",")[1] || url;
+      } else {
+        remoteIndices.push(i);
+        remoteUrls.push(url);
+      }
     });
-    if (!r.ok) throw new Error((await r.json()).detail || "Proxy fetch failed");
-    return (await r.json()).images;
+    if (remoteUrls.length > 0) {
+      const r = await fetch(`${API_BASE}/api/proxy-images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ urls: remoteUrls }),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail || "Proxy fetch failed");
+      const fetched = (await r.json()).images;
+      remoteIndices.forEach((origIdx, fetchIdx) => {
+        results[origIdx] = fetched[fetchIdx];
+      });
+    }
+    return results;
   };
 
   const allImages = [
@@ -288,7 +316,8 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
       const base64Images = await fetchImagesViaProxy(allImages.map(p => p.image_url));
       const imageNames = allImages.map((p, i) => {
         const url = p.image_url || "";
-        return url.split("/").pop() || (i === 0 ? "main" : `ref${i}`);
+        if (url.startsWith("data:")) return p.title || (p.isMain ? "main image" : `ref image ${i}`);
+        return url.split("/").pop()?.split("?")[0] || (p.isMain ? "main image" : `ref image ${i}`);
       });
       const r = await fetch(`${API_BASE}/api/generate-image/attributes`, {
         method: "POST",
@@ -297,7 +326,7 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.detail || "Lỗi phân tích ảnh");
-      appendMessage(makeMsg("attribute_table", { text: data.caption, concepts: [] }));
+      appendMessage(makeMsg("attribute_table", { rows: data.rows, image_names: data.image_names, concepts: [] }));
     } catch (e) {
       setAiError(`❌ Get Attributes: ${e.message}`);
     } finally {
@@ -373,6 +402,16 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
                 onKeyDown={e => e.key === "Enter" && handleAddManual()}
               />
             </div>
+            <input
+              type="number"
+              min={1}
+              max={200}
+              value={crawlLimit}
+              onChange={e => setCrawlLimit(e.target.value)}
+              placeholder="60"
+              className="w-20 border border-gray-200 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-300 bg-gray-50 focus:bg-white transition-colors"
+              title="Số lượng kết quả mỗi nguồn (mặc định 60)"
+            />
             <button
               type="button"
               onClick={handleAddManual}
@@ -407,15 +446,30 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
               <span className="text-xs font-medium text-gray-500">
                 Images ({allImages.length})
               </span>
-              <button
-                type="button"
-                onClick={() => { setDrawerOpen(o => !o); if (!drawerOpen) loadCrawlHistory(); }}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                  drawerOpen ? "bg-violet-600 text-white border-violet-600" : "text-violet-600 border-violet-300 hover:bg-violet-50"
-                }`}
-              >
-                {drawerOpen ? "✕ Close" : "📂 Pick from history"}
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => { setDrawerOpen(o => !o); if (!drawerOpen) loadCrawlHistory(); }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                    drawerOpen ? "bg-violet-600 text-white border-violet-600" : "text-violet-600 border-violet-300 hover:bg-violet-50"
+                  }`}
+                >
+                  {drawerOpen ? "✕ Close" : "📂 Pick from history"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setManualUploadOpen(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border text-violet-600 border-violet-300 hover:bg-violet-50 transition-colors"
+                >
+                  📷 Upload
+                </button>
+              </div>
+              <ManualUploadModal
+                open={manualUploadOpen}
+                onClose={() => setManualUploadOpen(false)}
+                onConfirm={handleManualUploadConfirm}
+                multiple={true}
+              />
             </div>
 
             <div className="flex flex-wrap gap-2">

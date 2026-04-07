@@ -124,38 +124,46 @@ async def _generate_description_sections(
 
 def _build_description_text(
     listing_title: str,
-    digital_notice_lines: list[str],
+    download_includes_lines: list[str],
     materials_skill_level_lines: list[str],
-    finished_sizes_lines: list[str],
-    brand_story_paragraph: str,
-    copyright_lines: list[str],
+    finished_size_lines: list[str],
+    what_is_it_use_for_lines: list[str],
+    behind_the_design_paragraph: str,
+    please_read_before_purchase_lines: list[str],
+    faqs_lines: list[str],
     shop_link: str,
 ) -> str:
-    divider = "________________________________________"
-    shop_link_line = shop_link.strip() or "Add your shop link before publishing."
+    shop_link_line = shop_link.strip() or "https://www.etsy.com/shop/KniriCrochetHome"
 
     parts = [
-        f"🌸 {listing_title.strip()}",
-        divider,
-        "✨ PLEASE READ BEFORE PURCHASING",
-        "\n".join(digital_notice_lines),
-        divider,
-        "🧶 Materials & Skill Level",
-        "\n".join(f"\u2022 {line}" for line in materials_skill_level_lines),
-        divider,
-        "📏 Finished Sizes",
-        "\n".join(f"\u2022 {line}" for line in finished_sizes_lines),
-        divider,
-        "💛 Product Story",
-        brand_story_paragraph,
-        divider,
-        "📜 Usage & Copyright",
-        "\n".join(f"\u2022 {line}" for line in copyright_lines),
-        divider,
-        f"🌿 {shop_link_line}",
+        listing_title.strip(),
+        "",
+        "YOUR DOWNLOAD INCLUDES",
+        "\n".join(f"• {line}" for line in download_includes_lines),
+        "",
+        "MATERIALS & SKILL LEVEL",
+        "\n".join(f"• {line}" if ':' in line else line for line in materials_skill_level_lines),
+        "",
+        "FINISHED SIZE",
+        "\n".join(finished_size_lines),
+        "",
+        "WHAT IS IT USE FOR",
+        "\n".join(f"• {line}" for line in what_is_it_use_for_lines),
+        "",
+        "BEHIND THE DESIGN",
+        behind_the_design_paragraph,
+        "",
+        "PLEASE READ BEFORE PURCHASE",
+        "\n".join(f"• {line}" for line in please_read_before_purchase_lines),
+        "",
+        "FAQs",
+        "\n".join(faqs_lines),
+        "",
+        "View more Kniri patterns:",
+        shop_link_line,
     ]
 
-    return "\n".join(part for part in parts if part).strip()
+    return "\n".join(part for part in parts).strip()
 
 
 @router.post("/api/listing/generate_description")
@@ -190,32 +198,28 @@ async def generate_listing_description(req: GenerateDescriptionRequest):
 
     try:
         generated = await _generate_description_sections(work_req, sorted_items, req3_tags)
-        digital_notice_lines = _normalize_lines(generated.get("digital_notice_lines"))
+        download_includes_lines = _normalize_lines(generated.get("download_includes_lines"))
         materials_skill_level_lines = _normalize_lines(generated.get("materials_skill_level_lines"))
-        finished_sizes_lines = _normalize_lines(generated.get("finished_sizes_lines"))
-        brand_story_paragraph = _normalize_paragraph(generated.get("brand_story_paragraph"))
-        copyright_lines = _normalize_lines(generated.get("copyright_lines"))
+        finished_size_lines = _normalize_lines(generated.get("finished_size_lines"))
+        what_is_it_use_for_lines = _normalize_lines(generated.get("what_is_it_use_for_lines"))
+        behind_the_design_paragraph = _normalize_paragraph(generated.get("behind_the_design_paragraph"))
+        please_read_before_purchase_lines = _normalize_lines(generated.get("please_read_before_purchase_lines"))
+        faqs_lines = _normalize_lines(generated.get("faqs_lines"))
 
-        if not digital_notice_lines:
-            raise ValueError("REQ4 missing digital_notice_lines.")
-        if not materials_skill_level_lines:
-            raise ValueError("REQ4 missing materials_skill_level_lines.")
-        if not finished_sizes_lines:
-            raise ValueError("REQ4 missing finished_sizes_lines.")
-        if not brand_story_paragraph:
-            raise ValueError("REQ4 missing brand_story_paragraph.")
-        if not copyright_lines:
-            raise ValueError("REQ4 missing copyright_lines.")
+        if not behind_the_design_paragraph:
+            raise ValueError("REQ4 missing behind_the_design_paragraph.")
     except Exception as e:
         raise_for_ai_error(e, "REQ4 generate description")
 
     description_text = _build_description_text(
         listing_title=work_req.listing_title,
-        digital_notice_lines=digital_notice_lines,
+        download_includes_lines=download_includes_lines,
         materials_skill_level_lines=materials_skill_level_lines,
-        finished_sizes_lines=finished_sizes_lines,
-        brand_story_paragraph=brand_story_paragraph,
-        copyright_lines=copyright_lines,
+        finished_size_lines=finished_size_lines,
+        what_is_it_use_for_lines=what_is_it_use_for_lines,
+        behind_the_design_paragraph=behind_the_design_paragraph,
+        please_read_before_purchase_lines=please_read_before_purchase_lines,
+        faqs_lines=faqs_lines,
         shop_link=work_req.shop_link,
     )
 
@@ -228,11 +232,13 @@ async def generate_listing_description(req: GenerateDescriptionRequest):
         "shop_link": work_req.shop_link,
         "keyword_sources": keyword_sources,
         "sections": {
-            "digital_notice_lines": digital_notice_lines,
+            "download_includes_lines": download_includes_lines,
             "materials_skill_level_lines": materials_skill_level_lines,
-            "finished_sizes_lines": finished_sizes_lines,
-            "brand_story_paragraph": brand_story_paragraph,
-            "copyright_lines": copyright_lines,
+            "finished_size_lines": finished_size_lines,
+            "what_is_it_use_for_lines": what_is_it_use_for_lines,
+            "behind_the_design_paragraph": behind_the_design_paragraph,
+            "please_read_before_purchase_lines": please_read_before_purchase_lines,
+            "faqs_lines": faqs_lines,
         },
         "description_text": description_text,
         "updated_at": now_iso(),

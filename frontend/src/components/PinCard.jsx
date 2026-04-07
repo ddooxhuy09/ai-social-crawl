@@ -129,9 +129,12 @@ const STATS_BY_SOURCE = {
   reddit: RedditStats,
 };
 
-export default function PinCard({ pin, onPick }) {
+export function PinStats({ pin }) {
   const StatsComponent = STATS_BY_SOURCE[pin.source] || DefaultStats;
+  return <StatsComponent pin={pin} />;
+}
 
+export default function PinCard({ pin, onPick }) {
   return (
     <a
       href={pin.pin_url}
@@ -166,7 +169,7 @@ export default function PinCard({ pin, onPick }) {
         )}
 
         <div className="flex flex-wrap gap-0.5">
-          <StatsComponent pin={pin} />
+          <PinStats pin={pin} />
         </div>
 
         <div className="text-xs font-semibold text-gray-900">{pin.title || "(No title)"}</div>

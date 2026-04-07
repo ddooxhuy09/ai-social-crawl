@@ -39,6 +39,59 @@ class KeywordProcessRequest(BaseModel):
     project_id: str | None = None
 
 
+class KeywordManualRequest(BaseModel):
+    listing_name: str
+    keywords: str
+    seed_keyword: str
+
+
+@router.post("/api/listing/keywords_manual")
+async def save_manual_keywords(req: KeywordManualRequest):
+    """
+    REQ 1 (Manual): Save manually entered keywords directly without AI filtering.
+    """
+    # ensure listing history exists
+    history = load_listing_history(req.listing_name)
+    if not history:
+        history = build_empty_listing_history(req.listing_name)
+
+    raw_keywords = [k.strip() for k in req.keywords.replace("\n", ",").split(",") if k.strip()]
+    if not raw_keywords:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập ít nhất 1 keyword.")
+
+    # Deduplicate while preserving order
+    seen = set()
+    final_items = []
+    for k in raw_keywords:
+        key = k.lower()
+        if key not in seen:
+            seen.add(key)
+            final_items.append({"keyword": k, "score": 99.9})
+
+    AI_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    seed_key = req.seed_keyword.replace(' ', '_') or "manual"
+    out_filename = f"etsy_keywords_{seed_key}_MANUAL_{timestamp}.json"
+    out_path = AI_HISTORY_DIR / out_filename
+    out_path.write_text(json.dumps(final_items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    history["source_filename"] = "manual_input"
+    history["seed_keyword"] = req.seed_keyword
+    history["req1"] = {
+        "out_filename": out_filename,
+        "total_filtered": len(final_items),
+        "data": final_items,
+        "updated_at": now_iso(),
+    }
+    history["req2"] = None
+    history["req3"] = None
+    history["req4"] = None
+    history["req5"] = None
+    history = save_listing_history(history)
+
+    return build_listing_history_response(history)
+
+
 @router.get("/api/listing/all")
 async def list_all_listings():
     return list_all_listing_histories()

@@ -93,6 +93,40 @@ def save_product_results(search_key: str, all_items: list, project_id: str = Non
 
     print(f"\n[PRODUCTS] Lưu {len(filtered)} sản phẩm → {csv_path}")
 
+    # Gửi Telegram (Cách ly độc lập khỏi FastAPI db.py để tránh lỗi thư viện chéo)
+    try:
+        import sys
+        from pathlib import Path
+        _ROOT_DIR = str(Path(__file__).resolve().parent.parent)
+        if _ROOT_DIR not in sys.path:
+            sys.path.insert(0, _ROOT_DIR)
+            
+        from projects.telegram_notify import _send_telegram_sync
+        import html
+        import json
+        from pathlib import Path
+        
+        p_name = "Crawl Page"
+        if project_id:
+            try:
+                p_path = Path("history/projects") / f"{project_id}.json"
+                if p_path.exists():
+                    p_data = json.loads(p_path.read_text(encoding="utf-8"))
+                    p_name = p_data.get("name", p_name)
+            except Exception: pass
+            
+        msg = (
+            f"✅ <b>[Etsy Hunt] Đã gặt xong lô Sản phẩm!</b>\n"
+            f"📁 Project: <b>{html.escape(p_name)}</b>\n"
+            f"📍 Phase: <b>Original Phase (Step 1)</b>\n"
+            f"🛒 Keyword: <b>{html.escape(search_key)}</b>\n"
+            f"📦 Số lượng: {len(filtered)} sản phẩm\n"
+            f"👉 Mở app để chọn sản phẩm gốc ngay."
+        )
+        _send_telegram_sync(msg)
+    except Exception as e:
+        print(f"[TELEGRAM] Lỗi gửi báo cáo HEnull: {e}")
+
 
 async def crawl_products(
     captured_url: str,

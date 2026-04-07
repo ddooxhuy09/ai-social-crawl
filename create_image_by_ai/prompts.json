@@ -54,15 +54,13 @@
                 }
             },
             "output_format": {
-                "type": "Markdown table",
+                "type": "JSON array",
                 "extreme_importance_rules": [
-                    "Return EXACTLY ONE Markdown table and NOTHING else.",
+                    "Return ONLY a valid JSON array. No markdown, no explanation, no code block.",
                     "No overlapping attribute definitions."
                 ],
-                "table_structure": {
-                    "header_row": "attribute | main image | crawl image 1 | crawl image 2 | ...",
-                    "subsequent_rows": "[attribute name] | [value for main image] | [value for crawl image 1] | ..."
-                }
+                "structure": "Each element is an object with: 'attribute' (English name), 'vi' (Vietnamese translation of attribute name), 'values' (object mapping each image name to its value string in English, or empty string if not visible), and 'vi_values' (object mapping each image name to the Vietnamese translation of its value).",
+                "example": "[{\"attribute\": \"Main Color\", \"vi\": \"Màu sắc chính\", \"values\": {\"main image\": \"warm brown\", \"crawl image 1\": \"pastel pink\"}, \"vi_values\": {\"main image\": \"nâu ấm\", \"crawl image 1\": \"hồng pastel\"}}, {\"attribute\": \"Eye Style\", \"vi\": \"Kiểu mắt\", \"values\": {\"main image\": \"round black safety eyes\", \"crawl image 1\": \"embroidered closed eyes\"}, \"vi_values\": {\"main image\": \"mắt an toàn tròn đen\", \"crawl image 1\": \"mắt thêu nhắm\"}}]"
             }
         }
     },

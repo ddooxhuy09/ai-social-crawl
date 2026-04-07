@@ -274,6 +274,7 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
       phaseName: phaseName,
       taskId: task.id,
       status: "pending",
+      ...(task.limit_per_source ? { limit_per_source: task.limit_per_source } : {}),
     };
 
     try {

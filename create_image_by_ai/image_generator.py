@@ -81,11 +81,12 @@ def _b64_to_pil(data_url: str):
     return PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
 
 
-async def get_image_attributes(images_b64: list[str], image_names: list[str] = None, description: str = "") -> str:
+async def get_image_attributes(images_b64: list[str], image_names: list[str] = None, description: str = "") -> list[dict]:
     """
     Gọi Gemini vision LLM với attribute analysis prompt + danh sách ảnh.
     images_b64: list các data URL (data:image/...;base64,...) hoặc raw base64.
     image_names: list tên file ảnh (optional). Nếu có, dùng làm header cột.
+    Trả về list[dict] với các key: attribute, vi, values (dict image_name -> value).
     """
     from create_image_by_ai.prompt_store import get_attribute_prompt
 
@@ -106,27 +107,18 @@ async def get_image_attributes(images_b64: list[str], image_names: list[str] = N
     print(f"[get_image_attributes] model={GEMINI_VISION_MODEL}, số ảnh={len(images_b64)}")
     print(f"[get_image_attributes] image names: {image_names}")
 
-    # Replace placeholder trong prompt bằng tên file thực tế
-    if image_names and len(image_names) > 0:
-        # Thay "main image" = image_names[0]
-        system_prompt = system_prompt.replace("main image", image_names[0])
-        # Thay "crawl image 1", "crawl image 2", ...
-        for i in range(1, len(image_names)):
-            placeholder = f"crawl image {i}"
-            system_prompt = system_prompt.replace(placeholder, image_names[i])
-        # Thay "..." cuối cùng nếu có nhiều hơn 3 ảnh
-        if len(image_names) > 3:
-            remaining = ", ".join(image_names[3:])
-            system_prompt = system_prompt.replace("...", remaining)
+    # Dùng tên ngắn khi gửi Gemini để tránh lỗi JSON key với tên dài/đặc biệt
+    # Sau đó remap kết quả về tên thật
+    gemini_names = ["main image"] + [f"crawl image {i}" for i in range(1, len(image_names))]
+    name_map = {g: r for g, r in zip(gemini_names, image_names)}  # gemini_name -> real_name
 
     # Chuyển tất cả ảnh sang PIL Image
     pil_images = [_b64_to_pil(url) for url in images_b64]
 
-    # Gemini hỗ trợ nhiều ảnh trực tiếp, gửi từng ảnh kèm nhãn (tên file)
+    # Gemini hỗ trợ nhiều ảnh trực tiếp, gửi từng ảnh kèm nhãn ngắn
     contents = []
     for i, img in enumerate(pil_images):
-        label = image_names[i] if i < len(image_names) else f"image {i+1}"
-        contents.append(f"[{label}]")
+        contents.append(f"[{gemini_names[i]}]")
         contents.append(img)
     if description:
         contents.append(f"[User description]: {description}")
@@ -139,12 +131,47 @@ async def get_image_attributes(images_b64: list[str], image_names: list[str] = N
         contents=contents,
     )
     print(f"[get_image_attributes] Gemini response OK")
-    result = response.text
-    # Post-process: replace generic placeholders the AI may have kept
-    result = result.replace("main image", image_names[0])
-    for i in range(1, len(image_names)):
-        result = result.replace(f"crawl image {i}", image_names[i])
-    return result
+    raw = response.text.strip()
+
+    # Strip markdown code fences if Gemini wraps in ```json ... ```
+    if raw.startswith("```"):
+        raw = raw.split("```", 2)[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+        if raw.endswith("```"):
+            raw = raw[:-3].strip()
+
+    # Extract the JSON array portion (from first '[' to last ']')
+    start = raw.find("[")
+    end = raw.rfind("]")
+    if start != -1 and end != -1 and end > start:
+        raw = raw[start:end + 1]
+
+    try:
+        rows: list[dict] = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"[get_image_attributes] JSON parse error: {e}")
+        print(f"[get_image_attributes] Raw response (first 500 chars):\n{raw[:500]}")
+        raise RuntimeError(f"Gemini trả về JSON không hợp lệ: {e}. Thử lại để Gemini format lại.")
+
+    # Remap gemini short names → real display names
+    def _remap_keys(d: dict) -> dict:
+        result = {}
+        for k, v in d.items():
+            real_key = name_map.get(k, k)  # fallback to original if not found
+            result[real_key] = v
+        return result
+
+    for row in rows:
+        if not isinstance(row.get("values"), dict):
+            row["values"] = {}
+        row["values"] = _remap_keys(row["values"])
+        if not isinstance(row.get("vi_values"), dict):
+            row["vi_values"] = {}
+        row["vi_values"] = _remap_keys(row["vi_values"])
+
+    return rows
 
 
 # ── Generate Idea (Gemini Text) ───────────────────────────────────────────────

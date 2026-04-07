@@ -55,12 +55,14 @@
             "rules": [
                 "You MUST preserve the user's factual inputs. Do not invent materials, sizes, terminology, or skill level details that are not supported by the inputs or obvious product context.",
                 "Naturally weave in relevant REQ1 keywords for Etsy SEO, but do not keyword-stuff or repeat the same phrase unnaturally.",
-                "Return a STRICT JSON object with exactly these keys: \"digital_notice_lines\", \"materials_skill_level_lines\", \"finished_sizes_lines\", \"brand_story_paragraph\", \"copyright_lines\".",
-                "\"digital_notice_lines\" must be an array of 2-4 concise lines suitable for the Digital Notice section.",
-                "\"materials_skill_level_lines\" must be an array of concise bullet-ready lines for the Materials & Skill Level section.",
-                "\"finished_sizes_lines\" must be an array of concise bullet-ready lines for the Finished Sizes section.",
-                "\"brand_story_paragraph\" must be a single readable paragraph.",
-                "\"copyright_lines\" must be an array of concise bullet-ready lines for allowed usage, copyright, and support notes.",
+                "Return a STRICT JSON object with exactly these keys: \"download_includes_lines\", \"materials_skill_level_lines\", \"finished_size_lines\", \"what_is_it_use_for_lines\", \"behind_the_design_paragraph\", \"please_read_before_purchase_lines\", \"faqs_lines\".",
+                "\"download_includes_lines\" must be an array of lines (do not include bullet points).",
+                "\"materials_skill_level_lines\" must be an array of lines (do not include bullet points).",
+                "\"finished_size_lines\" must be an array of lines.",
+                "\"what_is_it_use_for_lines\" must be an array of lines (do not include bullet points).",
+                "\"behind_the_design_paragraph\" must be a single readable paragraph.",
+                "\"please_read_before_purchase_lines\" must be an array of lines (do not include bullet points).",
+                "\"faqs_lines\" must be an array of lines in Q/A format (e.g. 'Q: ... A: ...').",
                 "Do not output markdown code fences, headings, numbering, or any extra text outside the JSON object."
             ]
         }
@@ -87,13 +89,12 @@
             "role": "Expert Etsy Image SEO Strategist",
             "task": "Analyze the uploaded product image named '{filename}' for the listing seed '{seed_keyword}'. Choose the single best long-tail keyword from the REQ1 list below, then write one SEO alt text for this exact image.\n\nREQ1 keyword options:\n{ai_keywords}\n\nKeywords already used for other uploaded images:\n{used_keywords}",
             "rules": [
-                "Return a STRICT JSON object with exactly these keys: \"keyword_used\" and \"alt_text\".",
+                "Return a STRICT JSON object with exactly these keys: \"keyword_used\", \"alt_text\", \"file_name\".",
                 "\"keyword_used\" must exactly match one keyword from the provided REQ1 keyword list.",
-                "\"alt_text\" must describe what is visually in the uploaded image and must include the chosen keyword naturally.",
-                "\"alt_text\" must be lowercase and use hyphens between words.",
+                "\"alt_text\" MUST describe the visual content of the image AND the purpose of the image it serves (mô tả hình + mục đích của hình ảnh).",
+                "\"file_name\" MUST describe the exact purpose of the image, written concisely, formatted with hyphens between words, and MUST start with 'Kniri-' (e.g. 'Kniri-panda-bookmark-gift').",
                 "Do NOT use phrases like \"image-of\", \"picture-of\", or \"photo-of\".",
-                "Do not mention camera language, backgrounds, or decorative details unless they are clearly important in the image.",
-                "Keep the alt text concise, specific, readable, and suitable for Etsy SEO.",
+                "Keep the alt text readable and suitable for Etsy SEO.",
                 "Do not output markdown, explanations, or extra text outside the JSON object."
             ]
         }

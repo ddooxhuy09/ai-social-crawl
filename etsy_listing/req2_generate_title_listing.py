@@ -25,6 +25,41 @@ class GenerateTitlesRequest(BaseModel):
     seed_keyword: str = ""
 
 
+class TitleManualRequest(BaseModel):
+    listing_name: str
+    title: str
+
+
+@router.post("/api/listing/title_manual")
+async def save_manual_title(req: TitleManualRequest):
+    """
+    REQ 2 (Manual): Add a manually entered title to the list of generated titles, or create new.
+    """
+    history = load_listing_history(req.listing_name)
+    if not history or not history.get("req1"):
+        raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu REQ1 cho listing này.")
+
+    manual_title = req.title.strip()
+    if not manual_title:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập title hợp lệ.")
+
+    # Get existing titles if any
+    existing_req2 = history.get("req2") or {}
+    titles_list = existing_req2.get("titles") or []
+    
+    # Add new title at the beginning
+    if manual_title not in titles_list:
+        titles_list.insert(0, manual_title)
+
+    history["req2"] = {
+        "custom_attributes": existing_req2.get("custom_attributes", ""),
+        "titles": titles_list,
+        "updated_at": now_iso(),
+    }
+    history = save_listing_history(history)
+    return build_listing_history_response(history)
+
+
 @router.post("/api/listing/generate_titles")
 async def generate_listing_titles(req: GenerateTitlesRequest):
     """

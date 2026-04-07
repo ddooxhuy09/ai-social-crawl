@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { API_BASE } from "../../../constants";
+import ManualUploadModal from "../../../components/ManualUploadModal";
 
 const HENULL_POLL_MS = 5000;
 
@@ -59,6 +60,13 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
   const [crawlHistoryLoading, setCrawlHistoryLoading] = useState(false);
 
   const [crawlOpen, setCrawlOpen] = useState(false);
+  const [manualUploadOpen, setManualUploadOpen] = useState(false);
+
+  const handleManualUploadConfirm = (items) => {
+    if (!items || items.length === 0) return;
+    const item = items[0];
+    saveProject({ ...project, original: { ...original, original_item: { ...item, source: "manual" }, status: "done" } });
+  };
 
   const loadCrawlHistory = useCallback(async () => {
     setCrawlHistoryLoading(true);
@@ -490,14 +498,23 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
         </section>
       )}
 
+      {/* ── Manual upload modal ── */}
+      <ManualUploadModal
+        open={manualUploadOpen}
+        onClose={() => setManualUploadOpen(false)}
+        onConfirm={handleManualUploadConfirm}
+        multiple={false}
+      />
+
       {/* ── Crawl History → navigate to pick Original ── */}
       {!original_item && (
         <section className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={handleToggleCrawlHistory}
-            className="flex items-center gap-2 text-left group w-fit"
-          >
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleToggleCrawlHistory}
+              className="flex items-center gap-2 text-left group w-fit"
+            >
             <span
               className="text-[10px] text-gray-400 transition-transform duration-150"
               style={{ display: "inline-block", transform: crawlOpen ? "rotate(90deg)" : "rotate(0deg)" }}
@@ -505,6 +522,14 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
             <h3 className="text-sm font-bold text-gray-700 group-hover:text-gray-900">📂 Crawl History</h3>
             {crawlHistoryLoading && <span className="text-xs text-sky-500 animate-pulse">Loading...</span>}
           </button>
+            <button
+              type="button"
+              onClick={() => setManualUploadOpen(true)}
+              className="flex items-center gap-1 text-xs font-medium text-violet-600 border border-violet-300 hover:bg-violet-50 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              📷 Upload thủ công
+            </button>
+          </div>
 
           {crawlOpen && (
             <div className="flex flex-col gap-3 pl-4">

@@ -3,6 +3,21 @@ import time
 import json
 import random
 from pathlib import Path
+
+# --- BẢN VÁ LỖI DÀI HẠN (LONG-TERM PATCH) ---
+# Vá vĩnh viễn lỗi sập Dict Object của trình lách Bot Playwright mỗi khi nó khởi động Server!
+try:
+    import undetected_playwright._impl._connection as up_conn
+    _orig = up_conn.from_nullable_channel
+    def _patched(channel):
+        if isinstance(channel, dict): return None
+        return _orig(channel)
+    up_conn.from_nullable_channel = _patched
+    print("[SYSTEM] Đã kích hoạt khiên chống Crash cho undetected_playwright.")
+except ImportError:
+    pass
+# --------------------------------------------
+
 from projects.db import _load_queue, _save_queue, archive_task
 from crawlers.router import normalize_to_display, CRAWL_SOURCES
 from crawlers import (
@@ -16,6 +31,22 @@ from history_utils import save_history
 
 async def task_worker_loop():
     print("[WORKER] Starting Global Task Worker...")
+    
+    # Tự động gỡ các task 'running' mồ côi (Zombie tasks) do tắt server ngang
+    try:
+        startup_queue = _load_queue()
+        tasks = startup_queue.get("tasks", [])
+        changed = False
+        for t in tasks:
+            if t.get("status") == "running":
+                t["status"] = "pending"
+                changed = True
+        if changed:
+            _save_queue(startup_queue)
+            print("[WORKER] Đã reset các task 'running' bị vướng về lại trạng thái 'pending'.")
+    except Exception as e:
+        print(f"[WORKER] Lỗi khôi phục zombie tasks: {e}")
+
     while True:
         try:
             queue_data = _load_queue()
@@ -61,19 +92,22 @@ async def run_task(task: dict):
             break
     _save_queue(queue_data)
     
-    # 2. Execute based on type
+    # 2. Execute based on type (CÓ GIỚI HẠN TIMEOUT CHỐNG KẸT DEADLOCK)
     try:
         t_type = task.get("type") or task.get("page")
         if t_type == "crawl_keyword" or t_type == "crawl":
-            result = await execute_crawl_keyword(task)
+            # Chờ luồng này cào tối đa 1 tiếng (3600s) cho khối lượng dữ liệu khổng lồ
+            result = await asyncio.wait_for(execute_crawl_keyword(task), timeout=3600)
             task["status"] = "done"
             task["result"] = result
         elif t_type == "crawl-image" or t_type == "crawl_image":
-            result = await execute_crawl_image(task)
+            # 5 phút tối đa
+            result = await asyncio.wait_for(execute_crawl_image(task), timeout=300)
             task["status"] = "done"
             task["result"] = result
         elif t_type == "chat-create-image":
-            result = await execute_chat_create_image(task)
+            # 10 phút tối đa cho render AI
+            result = await asyncio.wait_for(execute_chat_create_image(task), timeout=600)
             task["status"] = "done"
             task["result"] = result
         else:
@@ -81,16 +115,74 @@ async def run_task(task: dict):
             task["status"] = "error"
             task["errorMessage"] = f"Unknown task type: {t_type}"
             
+    except asyncio.TimeoutError:
+        print(f"[WORKER] Task TIMEOUT after wait_for limit!")
+        task["status"] = "error"
+        task["errorMessage"] = "Đã quá giới hạn thời gian (Timeout) chờ kịch bản chạy!"
     except Exception as e:
         print(f"[WORKER] Task failed: {e}")
         task["status"] = "error"
-        task["errorMessage"] = str(e)
+        task["errorMessage"] = str(e) or type(e).__name__
     
     task["updatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     
     # 3. Archive (Move to history and sync to project)
     archive_task(task)
     print(f"[WORKER] Task finished and archived: {task_id}")
+    
+    # 4. Gọi thông báo bằng chuỗi Telegram async
+    if task.get("status") == "done":
+        try:
+            import projects.db
+            import projects.telegram_notify as tg
+            
+            t_type = task.get("type") or task.get("page")
+            
+            p_name = "Crawl Page"
+            project = {}
+            try:
+                project = projects.db._get_project(task.get("projectId"))
+                p_name = project.get("name", p_name)
+            except Exception:
+                pass
+            
+            # GỘP THÔNG BÁO CHO CRAWL TASK
+            if t_type in ("crawl_keyword", "crawl", "crawl-image", "crawl_image"):
+                queue_data = projects.db._load_queue()
+                remaining = [
+                    t for t in queue_data.get("tasks", [])
+                    if t.get("projectId") == task.get("projectId")
+                    and (t.get("type") or t.get("page")) in ("crawl_keyword", "crawl", "crawl-image", "crawl_image")
+                ]
+                # Nếu không còn lệnh crawl nào thuộc project này pending, gửi 1 cú chót
+                if len(remaining) == 0:
+                    tg.notify_crawl_all_done(p_name)
+                    
+            # BÁO CÁO CHO AI GENERATION TASK
+            elif t_type == "chat-create-image":
+                tasks = project.get("redesign", {}).get("tasks", [])
+                done_count = sum(1 for t in tasks if t.get("status") == "done")
+                tg.notify_ai_image_done(p_name, task.get("title", "Image"), done_count, len(tasks))
+                
+        except Exception as e:
+            print(f"[TELEGRAM] Báo cáo Task Done bị lỗi: {e}")
+            
+    elif task.get("status") == "error":
+        try:
+            import projects.db
+            import projects.telegram_notify as tg
+            
+            p_name = task.get("projectName", task.get("projectId", ""))
+            try:
+                project = projects.db._get_project(task.get("projectId"))
+                p_name = project.get("name", p_name)
+            except Exception: pass
+            
+            step_name = f"Worker Task [{task.get('type')}]"
+            err_msg = task.get("errorMessage", "Lỗi không xác định do Timeout hoặc API...")
+            tg.notify_error(p_name, step_name, err_msg)
+        except Exception as e:
+            print(f"[TELEGRAM] Báo cáo Lỗi bị lỗi: {e}")
 
 async def execute_crawl_keyword(task: dict):
     kw = task.get("keyword")

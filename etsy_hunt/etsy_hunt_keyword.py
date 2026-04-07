@@ -111,6 +111,41 @@ def save_keywords_csv(keyword: str, all_items: list, project_id: str = None) -> 
             row = {dest: item.get(src, "") for src, dest in KEYWORD_FIELD_MAPPING}
             writer.writerow(row)
     print(f"\nĐã lưu CSV: {csv_path} ({len(all_items)} dòng)")
+    
+    # Gửi Telegram
+    try:
+        import sys
+        from pathlib import Path
+        _ROOT_DIR = str(Path(__file__).resolve().parent.parent)
+        if _ROOT_DIR not in sys.path:
+            sys.path.insert(0, _ROOT_DIR)
+            
+        from projects.telegram_notify import _send_telegram_sync
+        import html
+        import json
+        from pathlib import Path
+        
+        p_name = "Crawl Page"
+        if project_id:
+            try:
+                p_path = Path("history/projects") / f"{project_id}.json"
+                if p_path.exists():
+                    p_data = json.loads(p_path.read_text(encoding="utf-8"))
+                    p_name = p_data.get("name", p_name)
+            except Exception: pass
+            
+        msg = (
+            f"✅ <b>[Etsy Hunt] Đã gặt xong lô Keyword!</b>\n"
+            f"📁 Project: <b>{html.escape(p_name)}</b>\n"
+            f"📍 Phase: <b>Original Phase (Step 1)</b>\n"
+            f"🔍 Nguồn gốc: <b>{html.escape(keyword)}</b>\n"
+            f"📦 Số lượng: {len(all_items)} từ khóa\n"
+            f"👉 Trở lại app để kiểm tra kết quả ngay."
+        )
+        _send_telegram_sync(msg)
+    except Exception as e:
+        print(f"[TELEGRAM] Lỗi gửi báo cáo HEnull: {e}")
+        
     return csv_path
 
 

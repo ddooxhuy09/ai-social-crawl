@@ -311,6 +311,9 @@ async def proxy_images(body: dict):
     }
 
     async def fetch_one(url: str) -> str:
+        if url.startswith("data:"):
+            # Already a data URL (manually uploaded image) — return as-is
+            return url
         try:
             async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
                 r = await client.get(url, headers=headers)

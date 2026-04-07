@@ -13,14 +13,17 @@ import { API_BASE } from "../constants";
 
 // ── EditableTable ─────────────────────────────────────────────────────────────
 
-export function EditableTable({ initialHeaders, initialRows, initialConcepts = [], onSave, onLogMessage, onUpdateConcepts, onGenerateNewDesign }) {
-  const isSavedTable = initialHeaders[initialHeaders.length - 1] === "🛠️ THIẾT KẾ MỚI (Dropdown)";
-  const isAiTable = initialHeaders[initialHeaders.length - 1] === "🛠️ THIẾT KẾ MỚI";
+export function EditableTable({ initialHeaders = [], initialRows = [], initialConcepts = [], initialJsonRows = null, imageNames = [], onSave, onLogMessage, onUpdateConcepts, onGenerateNewDesign }) {
+  const isJsonMode = initialJsonRows !== null;
+  const isSavedTable = !isJsonMode && initialHeaders[initialHeaders.length - 1] === "🛠️ THIẾT KẾ MỚI (Dropdown)";
+  const isAiTable = !isJsonMode && initialHeaders[initialHeaders.length - 1] === "🛠️ THIẾT KẾ MỚI";
   const hasDesignColumn = isSavedTable || isAiTable;
 
-  const sourceHeaders = hasDesignColumn
-    ? initialHeaders.slice(1, initialHeaders.length - 1)
-    : initialHeaders.slice(1);
+  const sourceHeaders = isJsonMode
+    ? imageNames
+    : hasDesignColumn
+      ? initialHeaders.slice(1, initialHeaders.length - 1)
+      : initialHeaders.slice(1);
 
   const _normalizeSourceName = (name, i) => {
     const n = name.toLowerCase().trim();
@@ -34,6 +37,20 @@ export function EditableTable({ initialHeaders, initialRows, initialConcepts = [
   };
 
   const [rows, setRows] = useState(() => {
+    if (isJsonMode) {
+      return initialJsonRows.map(r => {
+        const sourceValues = imageNames.map(name => r.values?.[name] || "");
+        const options = sourceValues.map((val, i) => {
+          if (val && val.trim() !== "" && val.trim() !== "-") {
+            const sName = _normalizeSourceName(imageNames[i] || "", i);
+            return { label: `${val.trim()} (${sName})`, value: `${val.trim()} (${sName})` };
+          }
+          return null;
+        }).filter(Boolean);
+        const viValues = imageNames.map(name => r.vi_values?.[name] || "");
+        return { id: Math.random().toString(36).substring(7), isCustom: false, key: r.attribute || "", vi: r.vi || "", sourceValues, viValues, selectedValue: options.length > 0 ? options[0].value : "", options, customMode: false, suggestions: [], loadingSuggestions: false };
+      });
+    }
     if (isSavedTable) {
       return initialRows.map(r => {
         const isCustom = r[0]?.includes("(Tự nhập)");
@@ -48,7 +65,7 @@ export function EditableTable({ initialHeaders, initialRows, initialConcepts = [
         }).filter(Boolean);
         let finalSelectedValue = selectedValue;
         if (!finalSelectedValue && options.length > 0) finalSelectedValue = options[0].value;
-        return { id: Math.random().toString(36).substring(7), isCustom, key: r[0]?.replace("(Tự nhập)", "").trim() || "", sourceValues, selectedValue: finalSelectedValue, options, customMode: false, suggestions: [], loadingSuggestions: false };
+        return { id: Math.random().toString(36).substring(7), isCustom, key: r[0]?.replace("(Tự nhập)", "").trim() || "", vi: "", sourceValues, viValues: sourceValues.map(() => ""), selectedValue: finalSelectedValue, options, customMode: false, suggestions: [], loadingSuggestions: false };
       });
     } else if (isAiTable) {
       return initialRows.map(r => {
@@ -64,7 +81,7 @@ export function EditableTable({ initialHeaders, initialRows, initialConcepts = [
         const selectedValue = (aiSuggestedValue && aiSuggestedValue !== "-")
           ? aiSuggestedValue
           : (options.length > 0 ? options[0].value : "");
-        return { id: Math.random().toString(36).substring(7), isCustom: false, key: r[0] || "", sourceValues, selectedValue, options, customMode: false, suggestions: [], loadingSuggestions: false };
+        return { id: Math.random().toString(36).substring(7), isCustom: false, key: r[0] || "", vi: "", sourceValues, viValues: sourceValues.map(() => ""), selectedValue, options, customMode: false, suggestions: [], loadingSuggestions: false };
       });
     } else {
       return initialRows.map(r => {
@@ -76,7 +93,7 @@ export function EditableTable({ initialHeaders, initialRows, initialConcepts = [
           }
           return null;
         }).filter(Boolean);
-        return { id: Math.random().toString(36).substring(7), isCustom: false, key: r[0] || "", sourceValues, selectedValue: options.length > 0 ? options[0].value : "", options, customMode: false, suggestions: [], loadingSuggestions: false };
+        return { id: Math.random().toString(36).substring(7), isCustom: false, key: r[0] || "", vi: "", sourceValues, viValues: sourceValues.map(() => ""), selectedValue: options.length > 0 ? options[0].value : "", options, customMode: false, suggestions: [], loadingSuggestions: false };
       });
     }
   });
@@ -86,7 +103,7 @@ export function EditableTable({ initialHeaders, initialRows, initialConcepts = [
   const [loadingConcepts, setLoadingConcepts] = useState(false);
   const [customInputValues, setCustomInputValues] = useState({});
 
-  const addCustomRow = () => setRows(prev => [...prev, { id: Math.random().toString(36).substring(7), isCustom: true, key: "", sourceValues: sourceHeaders.map(() => ""), selectedValue: "", options: [], customMode: true, suggestions: [], loadingSuggestions: false }]);
+  const addCustomRow = () => setRows(prev => [...prev, { id: Math.random().toString(36).substring(7), isCustom: true, key: "", vi: "", sourceValues: sourceHeaders.map(() => ""), viValues: sourceHeaders.map(() => ""), selectedValue: "", options: [], customMode: true, suggestions: [], loadingSuggestions: false }]);
   const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
   const updateRow = (id, field, value) => setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
 
@@ -207,35 +224,61 @@ export function EditableTable({ initialHeaders, initialRows, initialConcepts = [
           {rows.map((row, ri) => (
             <tr key={row.id} className={`group/row transition-colors hover:bg-gray-50 ${ri % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}>
               <td className={cellCls}>
-                <textarea value={row.key} placeholder="Tên thuộc tính..." onChange={(e) => updateRow(row.id, "key", e.target.value)}
-                  onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
-                  ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
-                  className={`w-full px-2 py-1.5 bg-transparent border-transparent hover:border-violet-200 focus:bg-white focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400 rounded text-sm transition-colors resize-none overflow-hidden ${!row.isCustom ? 'font-medium text-gray-700' : ''}`}
-                  rows={1} />
+                <div className="flex items-start gap-1">
+                  <textarea value={row.key} placeholder="Tên thuộc tính..." onChange={(e) => updateRow(row.id, "key", e.target.value)}
+                    onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
+                    ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
+                    className={`flex-1 px-2 py-1.5 bg-transparent border-transparent hover:border-violet-200 focus:bg-white focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400 rounded text-sm transition-colors resize-none overflow-hidden ${!row.isCustom ? 'font-medium text-gray-700' : ''}`}
+                    rows={1} />
+                  {row.vi && (
+                    <div className="relative group/vi flex-shrink-0 mt-1.5">
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded text-[9px] font-bold bg-violet-100 text-violet-500 cursor-default select-none border border-violet-200 hover:bg-violet-200 transition-colors">
+                        VN
+                      </span>
+                      <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover/vi:block w-max max-w-[200px] px-2.5 py-1.5 rounded-lg bg-gray-800 text-white text-xs leading-snug shadow-lg pointer-events-none">
+                        {row.vi}
+                        <div className="absolute -top-1 left-2 w-2 h-2 bg-gray-800 rotate-45" />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </td>
               {row.sourceValues.map((val, i) => (
                 <td key={i} className={cellCls}>
-                  <textarea value={val} placeholder={row.isCustom ? "Tùy chỉnh..." : "-"}
-                    onChange={(e) => {
-                      const newSourceValues = [...row.sourceValues]; newSourceValues[i] = e.target.value;
-                      let newOptions = newSourceValues.map((v, idx) => {
-                        if (v && v.trim() !== "" && v.trim() !== "-") {
-                          const sourceName = _normalizeSourceName(sourceHeaders[idx] || "", idx);
-                          return { label: `${v.trim()} (${sourceName})`, value: `${v.trim()} (${sourceName})` };
-                        }
-                        return null;
-                      }).filter(Boolean);
-                      setRows(prev => prev.map(r => {
-                        if (r.id !== row.id) return r;
-                        let newSelectedValue = r.selectedValue;
-                        if (!newSelectedValue && newOptions.length > 0) newSelectedValue = newOptions[0].value;
-                        return { ...r, sourceValues: newSourceValues, options: newOptions, selectedValue: newSelectedValue };
-                      }));
-                    }}
-                    className={`w-full px-2 py-1.5 bg-transparent border-transparent hover:border-violet-200 focus:bg-white focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400 rounded text-sm text-center text-gray-700 transition-colors resize-none overflow-hidden ${row.isCustom && (!val || val === "Tùy chỉnh") ? 'italic text-gray-400 text-xs' : ''}`}
-                    onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
-                    ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
-                    rows={1} />
+                  <div className="flex items-start gap-1">
+                    <textarea value={val} placeholder={row.isCustom ? "Tùy chỉnh..." : "-"}
+                      onChange={(e) => {
+                        const newSourceValues = [...row.sourceValues]; newSourceValues[i] = e.target.value;
+                        let newOptions = newSourceValues.map((v, idx) => {
+                          if (v && v.trim() !== "" && v.trim() !== "-") {
+                            const sourceName = _normalizeSourceName(sourceHeaders[idx] || "", idx);
+                            return { label: `${v.trim()} (${sourceName})`, value: `${v.trim()} (${sourceName})` };
+                          }
+                          return null;
+                        }).filter(Boolean);
+                        setRows(prev => prev.map(r => {
+                          if (r.id !== row.id) return r;
+                          let newSelectedValue = r.selectedValue;
+                          if (!newSelectedValue && newOptions.length > 0) newSelectedValue = newOptions[0].value;
+                          return { ...r, sourceValues: newSourceValues, options: newOptions, selectedValue: newSelectedValue };
+                        }));
+                      }}
+                      className={`flex-1 px-2 py-1.5 bg-transparent border-transparent hover:border-violet-200 focus:bg-white focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400 rounded text-sm text-center text-gray-700 transition-colors resize-none overflow-hidden ${row.isCustom && (!val || val === "Tùy chỉnh") ? 'italic text-gray-400 text-xs' : ''}`}
+                      onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
+                      ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
+                      rows={1} />
+                    {row.viValues?.[i] && (
+                      <div className="relative group/viv flex-shrink-0 mt-1.5">
+                        <span className="inline-flex items-center justify-center w-5 h-5 rounded text-[9px] font-bold bg-blue-100 text-blue-500 cursor-default select-none border border-blue-200 hover:bg-blue-200 transition-colors">
+                          VN
+                        </span>
+                        <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover/viv:block w-max max-w-[220px] px-2.5 py-1.5 rounded-lg bg-gray-800 text-white text-xs leading-snug shadow-lg pointer-events-none">
+                          {row.viValues[i]}
+                          <div className="absolute -top-1 right-2 w-2 h-2 bg-gray-800 rotate-45" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </td>
               ))}
               <td className={`${cellCls} bg-violet-50/30`}>
@@ -384,6 +427,21 @@ export function InlineText({ text }) {
 // ── MessageContent ────────────────────────────────────────────────────────────
 
 export function MessageContent({ msg, onSave, onLogMessage, onGenerateNewDesign }) {
+  // New JSON format — returned by updated /api/generate-image/attributes
+  if (msg.rows && Array.isArray(msg.rows)) {
+    return (
+      <EditableTable
+        initialJsonRows={msg.rows}
+        imageNames={msg.image_names || []}
+        initialConcepts={msg.concepts || []}
+        onSave={(tableMd) => onSave?.(tableMd, msg.concepts)}
+        onLogMessage={onLogMessage}
+        onUpdateConcepts={(newConcepts) => onSave?.(null, newConcepts)}
+        onGenerateNewDesign={onGenerateNewDesign}
+      />
+    );
+  }
+
   const text = msg.text;
   if (!text) return null;
 

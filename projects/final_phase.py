@@ -62,6 +62,12 @@ async def generate_word(project_id: str):
         project["final"]["status"] = "done"
         project["final"]["word_file"] = filename
         _update_project(project_id, project)
+        
+        try:
+            from projects.telegram_notify import notify_step3_done
+            notify_step3_done(project.get("name", "Unknown Project"), filename)
+        except Exception as e:
+            print(f"[TELEGRAM] Lỗi báo cáo Step 3: {e}")
 
         return FileResponse(
             path=str(filepath),

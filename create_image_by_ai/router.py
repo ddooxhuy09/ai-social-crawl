@@ -58,6 +58,17 @@ async def generate_image_endpoint(body: GenerateImageRequest):
             num_images=max(1, min(body.num_images, 4)),
         )
         save_prompt(body.prompt.strip(), model=body.model)
+        try:
+            from projects.telegram_notify import send_telegram
+            import html as _html
+            _prompt_preview = _html.escape(body.prompt.strip()[:200])
+            send_telegram(
+                f"🎨 <b>Generate New Design thành công!</b>\n"
+                f"🖼 Số ảnh: <b>{len(images)}</b>\n"
+                f"📝 Prompt: <i>{_prompt_preview}{'...' if len(body.prompt) > 200 else ''}</i>"
+            )
+        except Exception:
+            pass
         return {"images": images, "prompt": body.prompt, "model": body.model}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -125,8 +136,8 @@ async def get_image_attributes_endpoint(body: dict):
     from create_image_by_ai.image_generator import get_image_attributes
     try:
         result = await get_image_attributes(images, image_names, description=description)
-        print(f"[attributes] kết quả: {result[:100]}")
-        return {"caption": result}
+        print(f"[attributes] kết quả: {len(result)} rows")
+        return {"rows": result, "image_names": image_names}
     except Exception as e:
         import traceback
         print(f"[attributes] LỖI: {e}")
@@ -197,6 +208,17 @@ async def build_image_prompt_endpoint(body: dict):
     from create_image_by_ai.image_generator import build_image_prompt
     try:
         prompts = await build_image_prompt(attribute_table)
+        try:
+            from projects.telegram_notify import send_telegram
+            import html as _html
+            _preview = _html.escape((prompts[0] if prompts else "")[:200])
+            send_telegram(
+                f"📋 <b>Build Prompt thành công!</b>\n"
+                f"🔢 Số prompt: <b>{len(prompts)}</b>\n"
+                f"📝 Preview: <i>{_preview}{'...' if prompts and len(prompts[0]) > 200 else ''}</i>"
+            )
+        except Exception:
+            pass
         return {"prompts": prompts}
     except Exception as e:
         import traceback

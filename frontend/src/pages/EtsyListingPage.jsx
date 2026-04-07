@@ -108,9 +108,17 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
   const [aiSearchFilter, setAiSearchFilter] = useState("");
   const [aiSort, setAiSort] = useState({ col: "score", dir: "desc" });
 
+  const [req1Mode, setReq1Mode] = useState("csv"); // "csv" | "manual"
+  const [manualKeywordsInput, setManualKeywordsInput] = useState("");
+  const [manualSeedKeyword, setManualSeedKeyword] = useState("");
+  const [manualKeywordsLoading, setManualKeywordsLoading] = useState(false);
+
   const [customAttributes, setCustomAttributes] = useState("");
   const [titleLoading, setTitleLoading] = useState(false);
   const [titleResult, setTitleResult] = useState(null);
+
+  const [manualTitleInput, setManualTitleInput] = useState("");
+  const [manualTitleLoading, setManualTitleLoading] = useState(false);
 
   const [tagTitleInput, setTagTitleInput] = useState("");
   const [tagLoading, setTagLoading] = useState(false);
@@ -156,6 +164,14 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
     setAltUploads((prev) => {
       revokeAltUploadPreviews(prev);
       return nextUploads;
+    });
+  };
+
+  const removeAltUpload = (idToRemove) => {
+    setAltUploads((prev) => {
+      const item = prev.find(i => i.id === idToRemove);
+      if (item?.preview_url?.startsWith("blob:")) URL.revokeObjectURL(item.preview_url);
+      return prev.filter(i => i.id !== idToRemove);
     });
   };
 
@@ -423,6 +439,34 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
     }
   };
 
+  const handleManualKeywords = async () => {
+    if (!selectedListing) return;
+    if (!manualKeywordsInput.trim()) { showToast("Nhập ít nhất 1 keyword.", "error"); return; }
+    
+    setManualKeywordsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/listing/keywords_manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listing_name: selectedListing,
+          keywords: manualKeywordsInput,
+          seed_keyword: manualSeedKeyword || "manual",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Error saving manual keywords");
+      applyHistoryState(data);
+      refreshListings();
+      setManualKeywordsInput("");
+      showToast("✅ Đã lưu keywords thủ công!");
+    } catch (e) {
+      showToast("Error: " + e.message, "error");
+    } finally {
+      setManualKeywordsLoading(false);
+    }
+  };
+
   const handleGenerateTitles = async () => {
     if (!req1Data || !selectedListing) { showToast("Run REQ1 first.", "error"); return; }
     setTitleLoading(true);
@@ -440,6 +484,33 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
       showToast("Error: " + e.message, "error");
     } finally {
       setTitleLoading(false);
+    }
+  };
+
+  const handleManualTitle = async () => {
+    if (!req1Data || !selectedListing) { showToast("Run REQ1 first.", "error"); return; }
+    if (!manualTitleInput.trim()) { showToast("Enter a title.", "error"); return; }
+
+    setManualTitleLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/listing/title_manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listing_name: selectedListing,
+          title: manualTitleInput,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Error saving manual title");
+      applyHistoryState(data);
+      refreshListings();
+      setManualTitleInput("");
+      showToast("✅ Đã thêm title thủ công!");
+    } catch (e) {
+      showToast("Error: " + e.message, "error");
+    } finally {
+      setManualTitleLoading(false);
     }
   };
 
@@ -501,7 +572,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
       original_filename: file.name,
       preview_url: URL.createObjectURL(file),
     }));
-    replaceAltUploads(nextUploads);
+    setAltUploads((prev) => [...prev, ...nextUploads]);
     setReq5Result(null);
   };
 
@@ -575,13 +646,13 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
     descriptionResult?.listing_title || descriptionTitleInput.trim() || tagTitleInput.trim() || titleResult?.[0] || "";
   const finalListingTags = tagResult?.tags || [];
   const finalAltLines = req5Images.map(
-    (item, i) => `${i + 1}. ${item.original_filename || item.stored_filename}: ${item.alt_text}`
+    (item, i) => `${i + 1}. ${item.original_filename || item.stored_filename}:\nFile Name: ${item.file_name}\nAlt Text: ${item.alt_text}`
   );
   const finalSections = [
     { key: "title", label: "Title", value: finalListingTitle },
     { key: "description", label: "Description", value: descriptionResult?.description_text || "" },
     { key: "tags", label: "Tags", value: finalListingTags.join(", ") },
-    { key: "image_alt_text", label: "Image Alt Text", value: finalAltLines.join("\n") },
+    { key: "image_alt_text", label: "Image Alt Texts", value: finalAltLines.join("\n\n") },
   ];
   const completedCount = finalSections.filter((s) => s.value.trim()).length;
   const finalDocumentText = finalSections
@@ -943,48 +1014,84 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
               </div>
 
               <div className="px-6 py-5 flex flex-col gap-3">
-                {embedded ? (
-                  /* ── Embedded: CSV selected from left sidebar ── */
-                  <div className="flex items-center gap-3">
-                    {selectedCsvFile ? (
-                      <>
-                        <span className="flex-1 text-sm text-gray-700 truncate">📄 {selectedCsvFile}</span>
-                        <Button variant="sky" disabled={aiFilterLoading} onClick={handleAiFilterKeywords} className="shrink-0">
-                          {aiFilterLoading ? "Filtering..." : req1Data ? "Re-run" : "Run REQ1"}
-                        </Button>
-                      </>
-                    ) : (
-                      <p className="text-sm text-gray-400 italic">← Select a CSV from the left panel</p>
-                    )}
-                  </div>
+                <div className="flex bg-gray-100 p-1.5 rounded-xl self-start">
+                  <button onClick={() => setReq1Mode("csv")} className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${req1Mode === "csv" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Từ file CSV</button>
+                  <button onClick={() => setReq1Mode("manual")} className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${req1Mode === "manual" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Nhập tay</button>
+                </div>
+                
+                {req1Mode === "csv" ? (
+                  embedded ? (
+                    /* ── Embedded: CSV selected from left sidebar ── */
+                    <div className="flex items-center gap-3">
+                      {selectedCsvFile ? (
+                        <>
+                          <span className="flex-1 text-sm text-gray-700 truncate">📄 {selectedCsvFile}</span>
+                          <Button variant="sky" disabled={aiFilterLoading} onClick={handleAiFilterKeywords} className="shrink-0">
+                            {aiFilterLoading ? "Filtering..." : req1Data ? "Re-run" : "Run REQ1"}
+                          </Button>
+                        </>
+                      ) : (
+                        <p className="text-sm text-gray-400 italic">← Select a CSV from the left panel</p>
+                      )}
+                    </div>
+                  ) : (
+                    /* ── Normal: select dropdown ── */
+                    <div className="flex gap-2">
+                      <select
+                        value={selectedCsvFile}
+                        onChange={(e) => setSelectedCsvFile(e.target.value)}
+                        className="flex-1 border border-gray-200 bg-gray-50 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
+                      >
+                        <option value="">-- Select EtsyHunt CSV --</option>
+                        {csvFiles.map((item) => (
+                          <option key={item.filename} value={item.filename}>
+                            {item.filename} {item.size_kb ? `(${item.size_kb} KB)` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        variant="sky"
+                        disabled={!selectedCsvFile || aiFilterLoading}
+                        onClick={handleAiFilterKeywords}
+                        className="shrink-0"
+                      >
+                        {aiFilterLoading ? "Filtering..." : req1Data ? "Re-run" : "Run REQ1"}
+                      </Button>
+                    </div>
+                  )
                 ) : (
-                  /* ── Normal: select dropdown ── */
-                  <div className="flex gap-2">
-                    <select
-                      value={selectedCsvFile}
-                      onChange={(e) => setSelectedCsvFile(e.target.value)}
-                      className="flex-1 border border-gray-200 bg-gray-50 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
+                  /* ── Manual input ── */
+                  <div className="flex flex-col gap-3">
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        placeholder="Seed keyword (tuỳ chọn)" 
+                        className={inputCls("focus:ring-sky-400")} 
+                        value={manualSeedKeyword} 
+                        onChange={e => setManualSeedKeyword(e.target.value)} 
+                      />
+                    </div>
+                    <div>
+                      <textarea
+                        className={inputCls("focus:ring-sky-400")}
+                        style={{ minHeight: 96 }}
+                        placeholder="Nhập keywords thủ công (cách nhau bằng phẩy hoặc xuống dòng)..."
+                        value={manualKeywordsInput}
+                        onChange={e => setManualKeywordsInput(e.target.value)}
+                      />
+                    </div>
+                    <Button 
+                      variant="sky" 
+                      disabled={!manualKeywordsInput.trim() || manualKeywordsLoading} 
+                      onClick={handleManualKeywords}
                     >
-                      <option value="">-- Select EtsyHunt CSV --</option>
-                      {csvFiles.map((item) => (
-                        <option key={item.filename} value={item.filename}>
-                          {item.filename} {item.size_kb ? `(${item.size_kb} KB)` : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      variant="sky"
-                      disabled={!selectedCsvFile || aiFilterLoading}
-                      onClick={handleAiFilterKeywords}
-                      className="shrink-0"
-                    >
-                      {aiFilterLoading ? "Filtering..." : req1Data ? "Re-run" : "Run REQ1"}
+                      {manualKeywordsLoading ? "Đang lưu..." : "Lưu Keywords"}
                     </Button>
                   </div>
                 )}
 
                 {req1Data && (
-                  <div className="border border-gray-100 rounded-xl overflow-hidden">
+                  <div className="border border-gray-100 rounded-xl overflow-hidden mt-2">
                     <div className="px-4 py-2.5 bg-gray-50 flex items-center justify-between border-b border-gray-100">
                       <span className="text-[11px] font-semibold text-gray-500">{req1Data.total_filtered} filtered keywords</span>
                       <button
@@ -1086,6 +1193,25 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                 >
                   {titleLoading ? "Generating 5 titles..." : titleResult ? "Regenerate Titles" : "Generate Titles"}
                 </Button>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Hoặc nhập title thủ công..."
+                    className={inputCls(SECTION_RING.indigo)}
+                    value={manualTitleInput}
+                    onChange={(e) => setManualTitleInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleManualTitle()}
+                  />
+                  <Button
+                    variant="sky"
+                    className="shrink-0 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold"
+                    disabled={!manualTitleInput.trim() || manualTitleLoading || !req1Data}
+                    onClick={handleManualTitle}
+                  >
+                    {manualTitleLoading ? "..." : "Thêm"}
+                  </Button>
+                </div>
 
                 {titleResult && (
                   <div className="flex flex-col gap-2">
@@ -1382,8 +1508,14 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                 {altUploads.length > 0 && (
                   <div className="grid grid-cols-4 gap-2">
                     {altUploads.map((item) => (
-                      <div key={item.id} className="border border-gray-200 rounded-xl overflow-hidden">
+                      <div key={item.id} className="relative border border-gray-200 rounded-xl overflow-hidden group">
                         <img src={item.preview_url} alt={item.original_filename} className="w-full h-20 object-cover bg-gray-100" />
+                        <button
+                          onClick={(e) => { e.stopPropagation(); removeAltUpload(item.id); }}
+                          className="absolute top-1 right-1 bg-black/60 hover:bg-rose-500 text-white w-5 h-5 flex items-center justify-center rounded-full text-[10px] shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          ✕
+                        </button>
                         <p className="px-2 py-1 text-[10px] text-gray-500 truncate">{item.original_filename}</p>
                       </div>
                     ))}
@@ -1420,12 +1552,13 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                           <div className="p-3 flex flex-col gap-2">
                             <p className="text-[11px] text-gray-400 truncate">{item.original_filename || item.stored_filename}</p>
                             <p className="text-[11px] text-sky-600">keyword: {item.keyword_used}</p>
+                            <p className="text-[11px] text-emerald-600">file_name: {item.file_name}</p>
                             <div className="bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-2">
                               <p className="text-xs font-medium text-gray-800 leading-snug">{item.alt_text}</p>
                             </div>
                             <button
                               className="text-[11px] text-gray-400 hover:text-gray-600 text-left"
-                              onClick={() => copyText(item.alt_text, "Alt text copied")}
+                              onClick={() => copyText(`File Name: ${item.file_name}\nAlt Text: ${item.alt_text}`, "Copied file name and alt text")}
                             >
                               Copy
                             </button>

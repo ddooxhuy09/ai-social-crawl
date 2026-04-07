@@ -100,6 +100,16 @@ def set_original_item(project_id: str, body: dict):
     project["original"]["original_item"] = item
     project["original"]["status"] = "done"
     _update_project(project_id, project)
+    
+    try:
+        from projects.telegram_notify import notify_step1_done
+        notify_step1_done(
+            project.get("name", "Unknown Project"), 
+            item.get("title") or item.get("name") or "Original Item"
+        )
+    except Exception as e:
+        print(f"[TELEGRAM] Lỗi báo cáo Step 1: {e}")
+        
     return {"ok": True}
 
 @router.put("/{project_id}/original/social-results")

@@ -38,6 +38,7 @@ export default function HuntPage({ setResult, loadHistory }) {
   const [classifySort, setClassifySort] = useState({ col: "", dir: "desc" });
   const [huntCrawling, setHuntCrawling] = useState(false);
   const [huntCrawlProgress, setHuntCrawlProgress] = useState({ current: 0, total: 0, keyword: "", waiting: false });
+  const [crawlLimit, setCrawlLimit] = useState("");
   const [huntHistoryModalOpen, setHuntHistoryModalOpen] = useState(false);
   const [henullStarting, setHenullStarting] = useState(false);
   const productCrawlingRef = useRef(false);
@@ -126,19 +127,49 @@ export default function HuntPage({ setResult, loadHistory }) {
   };
 
   const [classifyingFile, setClassifyingFile] = useState(null);
+  const [classifyProgress, setClassifyProgress] = useState(null); // {done, total} or null
   const [classifyResult, setClassifyResult] = useState(null); // {filename, rows}
 
   // ── AI Group Search ───────────────────────────────────────────────────────
   const [groupQuery, setGroupQuery] = useState("");
   const [grouping, setGrouping] = useState(false);
+  const [groupingProgress, setGroupingProgress] = useState(null); // {stage, done, total} or null
   const [groupResults, setGroupResults] = useState({}); // {query → {query,total,groups,saved_at}}
   const [groupExpanded, setGroupExpanded] = useState({}); // "query::l2" → bool
   const [groupL3Expanded, setGroupL3Expanded] = useState({}); // "query::l2::l3" → bool
   const [groupQCollapsed, setGroupQCollapsed] = useState({}); // query → bool (collapse whole query panel)
 
+  // Poll a background job every 5s until done/error; calls onDone(result) or onError(msg).
+  const pollJobRef = useRef(null);
+  const pollJob = (jobId, onDone, onError, onProgress) => {
+    if (pollJobRef.current) clearInterval(pollJobRef.current);
+    pollJobRef.current = setInterval(async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/etsy_hunt/jobs/${jobId}`);
+        if (!r.ok) return;
+        const job = await r.json();
+        if (onProgress) onProgress(job);
+        if (job.status === "done") {
+          clearInterval(pollJobRef.current);
+          pollJobRef.current = null;
+          onDone(job.result);
+        } else if (job.status === "error") {
+          clearInterval(pollJobRef.current);
+          pollJobRef.current = null;
+          onError(job.error || "Unknown error");
+        }
+      } catch (_) {}
+    }, 5000);
+  };
+
+  // Stop polling on unmount
+  useEffect(() => () => { if (pollJobRef.current) clearInterval(pollJobRef.current); }, []);
+
   const handleGroupSearch = async () => {
     if (!huntDetail || !groupQuery.trim()) return;
     setGrouping(true);
+    setGroupingProgress(null);
+    let isPolling = false;
     try {
       const res = await fetch(
         `${API_BASE}/api/etsy_hunt/history/${huntDetail.filename}/group-search`,
@@ -149,19 +180,41 @@ export default function HuntPage({ setResult, loadHistory }) {
         }
       );
       if (!res.ok) throw new Error((await res.json()).detail || "Lỗi AI");
-      const data = await res.json(); // returns full dict {query → entry}
+      const data = await res.json();
+
+      if (data.job_id) {
+        // Large set — poll every 5s
+        isPolling = true;
+        setGroupingProgress({ stage: "queued", done: 0, total: data.total });
+        pollJob(
+          data.job_id,
+          (result) => {
+            setGroupResults(result);
+            setGrouping(false);
+            setGroupingProgress(null);
+            const q = data.query;
+            const entry = result[q];
+            if (entry?.groups?.length > 0)
+              setGroupExpanded((prev) => ({ ...prev, [`${q}::${entry.groups[0].group}`]: true }));
+            setGroupQCollapsed((prev) => ({ ...prev, [q]: false }));
+          },
+          (err) => { alert(`AI Group Search thất bại: ${err}`); setGrouping(false); setGroupingProgress(null); },
+          (job) => setGroupingProgress({ stage: job.stage, done: job.done || 0, total: job.total || data.total }),
+        );
+        return;
+      }
+
+      // Small set — result is inline
       setGroupResults(data);
-      // Auto-open first L2 of newly searched query
       const q = groupQuery.trim();
       const entry = data[q];
-      if (entry?.groups?.length > 0) {
+      if (entry?.groups?.length > 0)
         setGroupExpanded((prev) => ({ ...prev, [`${q}::${entry.groups[0].group}`]: true }));
-      }
       setGroupQCollapsed((prev) => ({ ...prev, [q]: false }));
     } catch (e) {
       alert(`AI Group Search thất bại: ${e.message}`);
     } finally {
-      setGrouping(false);
+      if (!isPolling) setGrouping(false);
     }
   };
 
@@ -176,17 +229,32 @@ export default function HuntPage({ setResult, loadHistory }) {
 
   const handleClassify = async (filename) => {
     setClassifyingFile(filename);
+    setClassifyProgress(null);
     setClassifyResult(null);
     setHuntHistoryModalOpen(false);
     try {
       const res = await fetch(`${API_BASE}/api/etsy_hunt/history/${filename}/classify`, { method: "POST" });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
+
+      if (data.job_id) {
+        // Large set — poll every 5s
+        setClassifyProgress({ done: 0, total: data.total });
+        pollJob(
+          data.job_id,
+          (result) => { setClassifyResult(result); setClassifyingFile(null); setClassifyProgress(null); },
+          (err) => { alert(`Phân loại thất bại: ${err}`); setClassifyingFile(null); setClassifyProgress(null); },
+          (job) => setClassifyProgress({ done: job.done || 0, total: job.total || data.total }),
+        );
+        return; // keep classifyingFile set until poll completes
+      }
+
+      // Small set — result is inline
       setClassifyResult(data);
     } catch (e) {
       alert(`Phân loại thất bại: ${e.message}`);
     } finally {
-      setClassifyingFile(null);
+      if (!classifyProgress) setClassifyingFile(null);
     }
   };
 
@@ -247,7 +315,7 @@ export default function HuntPage({ setResult, loadHistory }) {
         await fetch(`${API_BASE}/api/search`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ keyword: kw }),
+          body: JSON.stringify({ keyword: kw, limit_per_source: crawlLimit ? parseInt(crawlLimit) : 60 }),
         });
       } catch (_) {}
     }
@@ -554,7 +622,9 @@ export default function HuntPage({ setResult, loadHistory }) {
       {classifyingFile && (
         <div className="mx-4 mt-3 p-3 rounded-xl border border-violet-200 bg-violet-50 text-violet-700 text-sm font-medium flex items-center gap-2">
           <span className="animate-spin">⏳</span>
-          Đang phân loại từ khóa với AI... (có thể mất 1-2 phút)
+          {classifyProgress
+            ? `Đang phân loại từ khóa với AI... ${classifyProgress.done}/${classifyProgress.total}`
+            : "Đang phân loại từ khóa với AI... (có thể mất 1-2 phút)"}
         </div>
       )}
 
@@ -563,8 +633,7 @@ export default function HuntPage({ setResult, loadHistory }) {
         const NER_COLS = [
           "Màu sắc", "Kích thước", "Hoa văn", "Khác",
           "Chất liệu", "Tính năng/hiệu quả", "Đối tượng",
-          "Phong cách/kiểu dáng", "Cảnh",
-          "Từ theo mùa/sự kiện đặc biệt", "Dòng sản phẩm/mô hình bổ sung",
+          "Phong cách/kiểu dáng", "Cảnh", "Từ theo mùa/sự kiện đặc biệt",
         ];
         const METRIC_COLS = ["keyword", "score", "is_long_tail", "favorites", "competition", "sales"];
         return (
@@ -610,14 +679,14 @@ export default function HuntPage({ setResult, loadHistory }) {
                       );
                     })}
                     <th colSpan={4} className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ background: "#BDD7EE" }}>Thuộc tính biến thể</th>
-                    <th colSpan={7} className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ background: "#BDD7EE" }}>Từ khóa thuộc tính</th>
+                    <th colSpan={6} className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ background: "#BDD7EE" }}>Từ khóa thuộc tính</th>
                   </tr>
                   {/* Row 2: sub-groups */}
                   <tr>
                     <th rowSpan={2} className="border border-gray-300 px-2 py-1 text-center font-semibold" style={{ background: "#FCE4D6" }}>Màu sắc</th>
                     <th colSpan={2} className="border border-gray-300 px-2 py-1 text-center font-semibold" style={{ background: "#FCE4D6" }}>Thông số kỹ thuật</th>
                     <th rowSpan={2} className="border border-gray-300 px-2 py-1 text-center font-semibold" style={{ background: "#FCE4D6" }}>Khác</th>
-                    {["Chất liệu","Tính năng/hiệu quả","Đối tượng","Phong cách/kiểu dáng","Cảnh","Từ theo mùa/sự kiện đặc biệt","Dòng sản phẩm/mô hình bổ sung"].map(c => (
+                    {["Chất liệu","Tính năng/hiệu quả","Đối tượng","Phong cách/kiểu dáng","Cảnh","Từ theo mùa/sự kiện đặc biệt"].map(c => (
                       <th key={c} rowSpan={2} className="border border-gray-300 px-2 py-1 text-center font-semibold whitespace-nowrap" style={{ background: "#FCE4D6" }}>{c}</th>
                     ))}
                   </tr>
@@ -703,7 +772,9 @@ export default function HuntPage({ setResult, loadHistory }) {
                   disabled={grouping || !groupQuery.trim()}
                   className="px-3 py-1.5 rounded-lg bg-violet-500 text-white text-xs font-semibold hover:bg-violet-600 disabled:opacity-50 transition-colors whitespace-nowrap"
                 >
-                  {grouping ? "⏳ AI..." : "✨ AI Group"}
+                  {grouping && groupingProgress
+                    ? `⏳ ${groupingProgress.stage === "classify" ? "Phân loại" : groupingProgress.stage === "cluster" ? "Gom cụm" : "Nhúng"} ${groupingProgress.done}/${groupingProgress.total}`
+                    : grouping ? "⏳ AI..." : "✨ AI Group"}
                 </button>
                 {Object.keys(groupResults).length > 0 && (
                   <span className="text-xs text-violet-600 font-medium ml-1">
@@ -718,11 +789,25 @@ export default function HuntPage({ setResult, loadHistory }) {
                 )}
               </span>
               {huntSelectedRowIds.size > 0 && (
-                <Button variant="emerald" size="sm" disabled={huntCrawling} onClick={handleCrawlSelected}>
-                  {huntCrawling
-                    ? `⏳ Crawling ${huntCrawlProgress.current}/${huntCrawlProgress.total}...`
-                    : `🔍 Crawl ${huntSelectedRowIds.size} keywords`}
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={crawlLimit}
+                    onChange={(e) => setCrawlLimit(e.target.value)}
+                    placeholder="60"
+                    disabled={huntCrawling}
+                    className="w-16 px-2 py-1 text-xs border border-gray-300 rounded-lg text-center focus:outline-none focus:border-emerald-400 disabled:opacity-50"
+                    title="Số lượng kết quả mỗi nguồn (mặc định: 60)"
+                  />
+                  <span className="text-xs text-gray-400">/ nguồn</span>
+                  <Button variant="emerald" size="sm" disabled={huntCrawling} onClick={handleCrawlSelected}>
+                    {huntCrawling
+                      ? `⏳ Crawling ${huntCrawlProgress.current}/${huntCrawlProgress.total}...`
+                      : `🔍 Crawl ${huntSelectedRowIds.size} keywords`}
+                  </Button>
+                </div>
               )}
               {huntCrawling && huntCrawlProgress.keyword && (
                 <span className="text-xs text-gray-500">→ {huntCrawlProgress.keyword}</span>
@@ -751,7 +836,7 @@ export default function HuntPage({ setResult, loadHistory }) {
                 "Màu sắc", "Kích thước", "Hoa văn", "Khác",
                 "Chất liệu", "Tính năng/hiệu quả", "Đối tượng",
                 "Phong cách/kiểu dáng", "Cảnh",
-                "Từ theo mùa/sự kiện đặc biệt", "Dòng sản phẩm/mô hình bổ sung",
+                "Từ theo mùa/sự kiện đặc biệt",
               ];
               const clsMap = {};
               if (classifyResult) {
@@ -759,16 +844,16 @@ export default function HuntPage({ setResult, loadHistory }) {
                   if (r.keyword) clsMap[r.keyword.toLowerCase()] = r;
                 }
               }
-              const hasClassify = classifyResult != null;
               const allKws = Object.values(groupResults).flatMap(e => (e.groups || []).flatMap(g => (g.subgroups || []).flatMap(sg => sg.keywords || [])));
               const firstKw = allKws[0] || {};
+              const hasClassify = classifyResult != null || GRP_NER_COLS.some(c => firstKw[c] !== undefined);
               const numCols2 = Object.keys(firstKw).filter(
                 (k) => k !== "keyword" && k !== "_rowId" && firstKw[k] !== "" && !isNaN(Number(firstKw[k]))
               );
 
               const KwTable = ({ keywords }) => (
                 <div className="overflow-x-auto">
-                  <table className="border-collapse text-xs w-full" style={{ minWidth: hasClassify ? 1400 : 600 }}>
+                  <table className="border-collapse text-xs w-full" style={{ minWidth: hasClassify ? 1400 : 700 }}>
                     <thead>
                       <tr className="bg-gray-50">
                         <th className="px-3 py-1.5 text-left font-medium text-gray-500 border-b border-gray-200 sticky left-0 bg-gray-50 whitespace-nowrap">#</th>
@@ -783,21 +868,25 @@ export default function HuntPage({ setResult, loadHistory }) {
                     </thead>
                     <tbody>
                       {keywords.map((row, ri) => {
-                        const cls = clsMap[(row.keyword || "").toLowerCase()] || {};
+                        const kwText = typeof row === "string" ? row : (row.keyword || "");
+                        const cls = clsMap[kwText.toLowerCase()] || {};
                         return (
                           <tr key={ri} className={ri % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
                             <td className={`px-3 py-1.5 border-b border-gray-100 text-gray-400 sticky left-0 ${ri % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>{ri + 1}</td>
-                            <td className={`px-3 py-1.5 border-b border-gray-100 font-medium text-gray-800 whitespace-nowrap ${ri % 2 === 0 ? "bg-white" : "bg-gray-50"}`} style={{ position: "sticky", left: 32 }}>{row.keyword || ""}</td>
+                            <td className={`px-3 py-1.5 border-b border-gray-100 font-medium text-gray-800 whitespace-nowrap ${ri % 2 === 0 ? "bg-white" : "bg-gray-50"}`} style={{ position: "sticky", left: 32 }}>{kwText}</td>
                             {numCols2.map((col) => (
                               <td key={col} className="px-3 py-1.5 text-right border-b border-gray-100 whitespace-nowrap text-gray-600">
                                 {row[col] !== undefined && row[col] !== "" ? Number(row[col]).toLocaleString() : "—"}
                               </td>
                             ))}
-                            {hasClassify && GRP_NER_COLS.map((col) => (
-                              <td key={col} className="px-3 py-1.5 text-center border-b border-gray-100 whitespace-nowrap text-gray-700" style={{ background: ri % 2 === 0 ? "#fff9f6" : "#fef3ed" }}>
-                                {cls[col] || ""}
-                              </td>
-                            ))}
+                            {hasClassify && GRP_NER_COLS.map((col) => {
+                              const val = row[col] !== undefined ? row[col] : (cls[col] || "");
+                              return (
+                                <td key={col} className="px-3 py-1.5 text-center border-b border-gray-100 whitespace-nowrap text-gray-700" style={{ background: ri % 2 === 0 ? "#fff9f6" : "#fef3ed" }}>
+                                  {val || ""}
+                                </td>
+                              );
+                            })}
                           </tr>
                         );
                       })}

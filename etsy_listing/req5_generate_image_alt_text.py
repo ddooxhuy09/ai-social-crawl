@@ -317,7 +317,6 @@ async def generate_image_alt_texts(
 
     generated_images: list[dict] = []
     used_keywords: list[str] = []
-    used_alt_texts: set[str] = set()
 
     for asset in assets:
         prompt = _build_generation_prompt(
@@ -334,23 +333,17 @@ async def generate_image_alt_texts(
             print(f"[REQ5] AI alt generation fallback for {asset['original_filename']}: {e}")
 
         keyword_used = _match_keyword(str(ai_payload.get("keyword_used") or ""), keyword_pool, used_keywords)
-        alt_text = _finalize_alt_text(str(ai_payload.get("alt_text") or ""), keyword_used)
-        alt_text, keyword_used = _ensure_unique_alt_text(
-            alt_text=alt_text,
-            keyword_used=keyword_used,
-            keyword_pool=keyword_pool,
-            used_keywords=used_keywords,
-            used_alt_texts=used_alt_texts,
-        )
+        alt_text = str(ai_payload.get("alt_text") or keyword_used).strip()
+        file_name = str(ai_payload.get("file_name") or f"Kniri-{_slugify(keyword_used)}").strip()
 
         used_keywords.append(keyword_used)
-        used_alt_texts.add(alt_text)
         generated_images.append(
             {
                 "original_filename": asset["original_filename"],
                 "stored_filename": asset["stored_filename"],
                 "asset_url": build_listing_asset_url(listing_name, ALT_SCOPE, asset["stored_filename"]),
                 "alt_text": alt_text,
+                "file_name": file_name,
                 "keyword_used": keyword_used,
             }
         )
@@ -358,7 +351,10 @@ async def generate_image_alt_texts(
     history["seed_keyword"] = seed_keyword
     history["req5"] = {
         "images": generated_images,
-        "copy_text": "\n".join(item["alt_text"] for item in generated_images),
+        "copy_text": "\n\n".join(
+            f"Image {i+1} ({item['original_filename']}):\nFile Name: {item['file_name']}\nAlt Text: {item['alt_text']}" 
+            for i, item in enumerate(generated_images)
+        ),
         "updated_at": now_iso(),
     }
     history = save_listing_history(history)
