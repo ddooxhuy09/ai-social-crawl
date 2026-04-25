@@ -40,7 +40,7 @@ export default function KanbanColumn({
         <div className="flex items-center gap-2.5 mb-3">
           <span className="text-xl">{phase.icon}</span>
           <h3 className="text-[0.9rem] font-bold text-gray-800 flex-1 leading-tight truncate">{phase.name}</h3>
-          <button type="button" onClick={onDelete} className="text-gray-300 hover:text-red-500 cursor-pointer text-lg shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 transition-colors">×</button>
+          <Button variant="ghost" type="button" onClick={onDelete} className="text-gray-300 hover:text-red-500 text-xl shrink-0 w-6 h-6 p-0 hover:bg-red-50 flex items-center justify-center transition-colors">×</Button>
         </div>
         
         <div className="flex items-center justify-between gap-2">

@@ -10,8 +10,6 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from supabase import create_client
-
 from projects.worker import task_worker_loop
 
 app = FastAPI(title="Pinterest Crawler API")
@@ -22,14 +20,7 @@ async def startup_event():
 
 # ── Auth middleware ────────────────────────────────────────────────────────────
 
-_supabase = None
-
-def _get_supabase():
-    global _supabase
-    if _supabase is None:
-        _supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
-    return _supabase
-
+from services.supabase_client import get_supabase as _get_supabase
 
 _SKIP_AUTH_PREFIXES = ("/api/auth/", "/health", "/avatars/")
 
@@ -100,6 +91,15 @@ app.include_router(listings_router)
 # Etsy Hunt (HEnull): /api/etsy_hunt/*, /api/open_henull
 from etsy_hunt.router import router as etsy_hunt_router
 app.include_router(etsy_hunt_router)
+
+
+# User Favorite Items: /api/user-favorites/*
+from user_favorite_items.router import router as user_favorites_router
+app.include_router(user_favorites_router)
+
+# Product Insights: /api/product-insights/*
+from product_insights.router import router as product_insights_router
+app.include_router(product_insights_router)
 
 
 # ── Avatar static files ────────────────────────────────────────────────────────

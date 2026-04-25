@@ -61,28 +61,30 @@ export default function QueueModal({
                 Track active tasks and execution history.
               </p>
             </div>
-            <button type="button" onClick={onClose}
-              className="text-gray-400 hover:text-gray-900 transition-colors text-2xl cursor-pointer">×</button>
+            <Button variant="ghost" type="button" onClick={onClose}
+              className="text-gray-400 hover:text-gray-900 transition-colors text-2xl w-8 h-8 p-0 hover:bg-gray-100 flex items-center justify-center">×</Button>
           </div>
           
           {/* Tabs */}
           <div className="flex px-6 gap-6">
-            <button
+            <Button
+              variant="ghost"
               onClick={() => setActiveTab("active")}
-              className={`pb-3 text-sm font-bold transition-all border-b-2 ${
+              className={`pb-3 text-sm font-bold transition-all border-b-2 rounded-none h-auto hover:bg-transparent ${
                 activeTab === "active" ? "border-emerald-600 text-emerald-600" : "border-transparent text-gray-400 hover:text-gray-600"
               }`}
             >
               Active Queue ({queue.length})
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
               onClick={() => setActiveTab("history")}
-              className={`pb-3 text-sm font-bold transition-all border-b-2 ${
+              className={`pb-3 text-sm font-bold transition-all border-b-2 rounded-none h-auto hover:bg-transparent ${
                 activeTab === "history" ? "border-emerald-600 text-emerald-600" : "border-transparent text-gray-400 hover:text-gray-600"
               }`}
             >
               Global History
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -113,16 +115,18 @@ export default function QueueModal({
                   }`}>
                     <div className="flex items-center gap-3">
                       <div className="flex flex-col gap-0.5 shrink-0">
-                        <button
+                        <Button
+                          variant="ghost"
                           disabled={!canMove || isFirst}
                           onClick={() => handleMove(idx, -1)}
-                          className="text-gray-300 hover:text-gray-600 disabled:opacity-0 cursor-pointer p-0.5 text-xs"
-                        >▲</button>
-                        <button
+                          className="text-gray-300 hover:text-gray-600 disabled:opacity-0 p-0.5 w-5 h-5 text-xs hover:bg-gray-100 flex items-center justify-center p-0"
+                        >▲</Button>
+                        <Button
+                          variant="ghost"
                           disabled={!canMove || isLast}
                           onClick={() => handleMove(idx, 1)}
-                          className="text-gray-300 hover:text-gray-600 disabled:opacity-0 cursor-pointer p-0.5 text-xs"
-                        >▼</button>
+                          className="text-gray-300 hover:text-gray-600 disabled:opacity-0 p-0.5 w-5 h-5 text-xs hover:bg-gray-100 flex items-center justify-center p-0"
+                        >▼</Button>
                       </div>
 
                       <div className="flex-1 min-w-0">
@@ -146,10 +150,10 @@ export default function QueueModal({
 
                       <div className="flex items-center gap-1 shrink-0">
                         {(isPending || isError) && (
-                          <button
+                          <Button variant="ghost"
                             onClick={() => handleRemove(item.id)}
-                            className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 cursor-pointer"
-                          >🗑️</button>
+                            className="text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity p-0 w-8 h-8 rounded-full flex items-center justify-center"
+                          >🗑️</Button>
                         )}
                         <span className="text-base">{STATUS_ICON[item.status] || "⏳"}</span>
                       </div>
@@ -161,12 +165,12 @@ export default function QueueModal({
                           {item.errorMessage}
                         </p>
                         {onRetry && (
-                          <button
+                          <Button variant="outline"
                             onClick={() => onRetry(item.id)}
-                            className="text-[11px] font-semibold text-red-700 bg-white border border-red-200 px-2.5 py-1 rounded-lg hover:bg-red-50 transition-colors shrink-0 cursor-pointer"
+                            className="text-[11px] font-semibold text-red-700 bg-white border-red-200 px-2.5 py-1 h-auto rounded-lg hover:bg-red-50 hover:text-red-800 transition-colors shrink-0"
                           >
                             ↺ Retry
-                          </button>
+                          </Button>
                         )}
                       </div>
                     )}

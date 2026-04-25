@@ -148,6 +148,27 @@ async def _run_group_search_job(
         job["error"] = str(e)
 
 
+# ── Open HEnull browser ──────────────────────────────────────────────────────
+
+@router.post("/api/open_henull")
+async def open_henull(mode: str = "keyword"):
+    """Launch HEnull browser for keyword or product crawling."""
+    import subprocess
+    project_dir = Path(__file__).resolve().parent.parent
+    script_name = "etsy_hunt_keyword.py" if mode == "keyword" else "etsy_hunt_product.py"
+    script_path = project_dir / "etsy_hunt" / script_name
+    if not script_path.exists():
+        raise HTTPException(status_code=500, detail=f"Không tìm thấy {script_name}.")
+    venv_python = project_dir / "social_crawl" / "Scripts" / "python.exe"
+    python_exe = str(venv_python) if venv_python.exists() else sys.executable
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+    try:
+        subprocess.Popen([python_exe, str(script_path)], cwd=str(project_dir), env=env)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Không mở được HEnull: {e}")
+    return {"status": "started"}
+
+
 # ── Keyword history routes ────────────────────────────────────────────────────
 
 @router.get("/api/etsy_hunt/status")

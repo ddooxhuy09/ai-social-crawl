@@ -142,72 +142,27 @@ async def get_image_attributes_endpoint(body: dict):
         import traceback
         print(f"[attributes] LỖI: {e}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/api/generate-image/idea")
-async def generate_idea_endpoint(body: dict):
-    """Generate a redesign idea from an attribute table using text LLM."""
-    attribute_table = body.get("attribute_table", "")
-    description = body.get("description", "")
-    if not attribute_table:
-        raise HTTPException(status_code=400, detail="Missing attribute_table")
-    from create_image_by_ai.image_generator import generate_idea
-    try:
-        result = await generate_idea(attribute_table, description=description)
-        return {"idea": result}
-    except Exception as e:
-        import traceback
-        print(f"[idea] LỖI: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/api/generate-image/suggest-attribute")
-async def suggest_attribute_endpoint(body: dict):
-    """Suggest 3 creative values for one attribute."""
-    attribute_name = body.get("attribute_name", "")
-    current_values = body.get("current_values", [])
-    full_table = body.get("full_table", "")
-    if not attribute_name:
-        raise HTTPException(status_code=400, detail="Missing attribute_name")
-    from create_image_by_ai.image_generator import suggest_attribute
-    try:
-        suggestions = await suggest_attribute(attribute_name, current_values, full_table)
-        return {"suggestions": suggestions}
-    except Exception as e:
-        import traceback
-        print(f"[suggest-attribute] LỖI: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/api/generate-image/suggest-concepts")
-async def suggest_concepts_endpoint(body: dict):
-    """Generate 3 overall design concepts from an attribute table."""
-    attribute_table = body.get("attribute_table", "")
-    if not attribute_table:
-        raise HTTPException(status_code=400, detail="Missing attribute_table")
-    from create_image_by_ai.image_generator import suggest_concepts
-    try:
-        concepts = await suggest_concepts(attribute_table)
-        return {"concepts": concepts}
-    except Exception as e:
-        import traceback
-        print(f"[suggest-concepts] LỖI: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        from google.genai.errors import ServerError as _GeminiServerError
+        msg = str(e)
+        if isinstance(e, _GeminiServerError) or any(k in msg for k in ("503", "429", "UNAVAILABLE", "Resource has been exhausted")):
+            raise HTTPException(
+                status_code=503,
+                detail="Hệ thống AI của Google đang quá tải. Vui lòng thử lại sau vài giây!",
+            )
+        raise HTTPException(status_code=500, detail=msg)
 
 
 @router.post("/api/generate-image/build-prompt")
 async def build_image_prompt_endpoint(body: dict):
     """Build image generation prompts from a finalized attribute table."""
     attribute_table = body.get("attribute_table", "")
+    image_names = body.get("image_names", [])
     if not attribute_table:
         raise HTTPException(status_code=400, detail="Missing attribute_table")
+    rows = attribute_table if isinstance(attribute_table, list) else []
     from create_image_by_ai.image_generator import build_image_prompt
     try:
-        prompts = await build_image_prompt(attribute_table)
+        prompts = await build_image_prompt(rows, image_names=image_names)
         try:
             from projects.telegram_notify import send_telegram
             import html as _html

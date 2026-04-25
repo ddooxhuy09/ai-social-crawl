@@ -1,10 +1,10 @@
-import json
 import uuid
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from projects.db import _get_project, _update_project, _load_keyword_tasks, _save_keyword_tasks, PROJECTS_DIR
+from history_utils import read_json, write_json
 
 router = APIRouter()
 
@@ -14,18 +14,13 @@ def _chat_path(project_id: str) -> Path:
     return PROJECTS_DIR / project_id / "redesign_chat.json"
 
 def _load_chat(project_id: str) -> list:
-    p = _chat_path(project_id)
-    if not p.exists():
-        return []
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        return read_json(_chat_path(project_id)) or []
     except Exception:
         return []
 
 def _save_chat(project_id: str, messages: list):
-    p = _chat_path(project_id)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(messages, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json(_chat_path(project_id), messages)
 
 
 @router.get("/{project_id}/redesign/chat")

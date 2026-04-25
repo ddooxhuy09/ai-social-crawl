@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { API_BASE, SORT_OPTIONS } from "../constants";
+import { downloadHistoryCsv as _downloadHistoryCsv } from "../lib/download";
+import { sortPins } from "../lib/sortPins";
+import HistoryModal from "../components/HistoryModal";
 import PinCard from "../components/PinCard";
 import ImageDropzone from "../components/ImageDropzone";
 import { Button } from "../components/ui/button";
@@ -18,14 +21,12 @@ function HistoryRow({ item, onLoad, onDownload, onDelete }) {
         <p className="text-[0.65rem] text-gray-400">{item.created_at?.slice(0, 16).replace("T", " ")}</p>
       </button>
       <div className="flex gap-1.5">
-        <button type="button" onClick={() => onDownload(item)}
-          className="text-[0.68rem] px-2 py-0.5 rounded border border-sky-200 bg-sky-50 text-sky-600 hover:bg-sky-100 cursor-pointer transition-colors">
+        <Button variant="outline-sky" size="xs" type="button" onClick={() => onDownload(item)}>
           Tải CSV
-        </button>
-        <button type="button" onClick={() => onDelete(item)}
-          className="text-[0.68rem] px-2 py-0.5 rounded border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 cursor-pointer transition-colors">
+        </Button>
+        <Button variant="outline-red" size="xs" type="button" onClick={() => onDelete(item)}>
           Xóa
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -105,21 +106,7 @@ export default function PinterestImagePage({ history, loadHistory, initialHistor
     }
   };
 
-  const downloadHistoryCsv = async (item) => {
-    try {
-      const res = await fetch(`${API_BASE}/api/history/${item.id}/download`);
-      if (!res.ok) throw new Error("Tải CSV thất bại.");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `pins_${(item.keyword || "data").replace(/[^a-zA-Z0-9_-]/g, "_")}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setError(err.message || "Không tải được CSV.");
-    }
-  };
+  const downloadHistoryCsv = (item) => _downloadHistoryCsv(item, API_BASE, setError);
 
   const deleteHistory = async (item) => {
     if (!window.confirm(`Xóa lịch sử "${item.keyword}"?`)) return;
@@ -141,24 +128,7 @@ export default function PinterestImagePage({ history, loadHistory, initialHistor
     if (q) list = list.filter((p) =>
       (p.title || "").toLowerCase().includes(q) || (p.description || "").toLowerCase().includes(q)
     );
-    const num = (v) => (typeof v === "number" ? v : parseInt(v, 10) || 0);
-    if (sortBy !== "default") {
-      list.sort((a, b) => {
-        switch (sortBy) {
-          case "title_asc": return (a.title || "").localeCompare(b.title || "");
-          case "title_desc": return (b.title || "").localeCompare(a.title || "");
-          case "likes_desc": return num(b.like_count) - num(a.like_count);
-          case "likes_asc": return num(a.like_count) - num(b.like_count);
-          case "reactions_desc": return num(b.reaction_count) - num(a.reaction_count);
-          case "reactions_asc": return num(a.reaction_count) - num(b.reaction_count);
-          case "saves_desc": return num(b.save_count) - num(a.save_count);
-          case "repins_desc": return num(b.repin_count) - num(a.repin_count);
-          case "comments_desc": return num(b.comment_count) - num(a.comment_count);
-          default: return 0;
-        }
-      });
-    }
-    return list;
+    return sortPins(list, sortBy);
   }, [pins, filterText, sortBy]);
 
   const imageHistory = (history || []).filter(h => h.id.includes("image_upload") || h.keyword?.startsWith("image_upload"));
@@ -278,40 +248,20 @@ export default function PinterestImagePage({ history, loadHistory, initialHistor
       </div>
 
       {/* History modal */}
-      {historyModalOpen && (
-        <div
-          className="fixed inset-0 z-[9998] bg-black/40 flex items-center justify-center"
-          onClick={(e) => { if (e.target === e.currentTarget) setHistoryModalOpen(false); }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl w-[520px] max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <p className="text-base font-semibold text-gray-900">Lịch sử upload ảnh</p>
-                {imageHistory.length > 0 && (
-                  <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{imageHistory.length}</span>
-                )}
-              </div>
-              <button type="button" onClick={() => setHistoryModalOpen(false)}
-                className="text-gray-400 hover:text-gray-700 text-lg leading-none cursor-pointer px-1">✕</button>
-            </div>
-            <div className="overflow-y-auto flex-1 p-4">
-              {imageHistory.length === 0 ? (
-                <p className="text-xs text-gray-400 py-4 text-center">Chưa có lịch sử nào.</p>
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  {imageHistory.map((item) => (
-                    <HistoryRow key={item.id} item={item}
-                      onLoad={(id) => { loadHistoryDetail(id); setHistoryModalOpen(false); }}
-                      onDownload={downloadHistoryCsv}
-                      onDelete={deleteHistory}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <HistoryModal
+        open={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        title="Lịch sử upload ảnh"
+        count={imageHistory.length}
+      >
+        {imageHistory.length > 0 && imageHistory.map((item) => (
+          <HistoryRow key={item.id} item={item}
+            onLoad={(id) => { loadHistoryDetail(id); setHistoryModalOpen(false); }}
+            onDownload={downloadHistoryCsv}
+            onDelete={deleteHistory}
+          />
+        ))}
+      </HistoryModal>
     </>
   );
 }

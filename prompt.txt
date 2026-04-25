@@ -1,0 +1,8 @@
+Please read and analyze the entire existing codebase to understand the current architecture, coding style, and shared resources (components, utils, hooks, types, etc.).
+
+I need to add a new feature: [Briefly describe the new feature here]
+
+Strict requirements for the new code:
+1. Maintain 100% consistency with the existing logic, architectural patterns, and coding style.
+2. Maximize the reuse of existing UI components, utility functions, and libraries already in the project. Do not create duplicates or reinvent the wheel.
+3. Ensure seamless integration, use correct relative/absolute import paths, and make sure no existing functionality is broken.

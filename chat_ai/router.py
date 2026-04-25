@@ -1,8 +1,9 @@
-import json
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+
+from history_utils import read_json, write_json, list_json_dir
 
 router = APIRouter(tags=["chat_ai"])
 
@@ -17,19 +18,15 @@ CHAT_AI_DIR.mkdir(parents=True, exist_ok=True)
 @router.get("/api/chat-ai/history")
 def list_chat_sessions():
     """List all saved chat sessions (id, title, created_at, message_count)."""
-    sessions = []
-    for f in sorted(CHAT_AI_DIR.glob("*.json"), reverse=True):
-        try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-            sessions.append({
-                "id": f.stem,
-                "title": data.get("title", f.stem),
-                "created_at": data.get("created_at", ""),
-                "message_count": len(data.get("messages", [])),
-            })
-        except Exception:
-            continue
-    return sessions
+    return list_json_dir(
+        CHAT_AI_DIR,
+        lambda data, path: {
+            "id":            data.get("id", path.stem),
+            "title":         data.get("title", path.stem),
+            "created_at":    data.get("created_at", ""),
+            "message_count": len(data.get("messages", [])) if isinstance(data, dict) else 0,
+        },
+    )
 
 
 @router.get("/api/chat-ai/history/{session_id}")
@@ -38,7 +35,7 @@ def get_chat_session(session_id: str):
     path = CHAT_AI_DIR / f"{session_id}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Session not found")
-    return json.loads(path.read_text(encoding="utf-8"))
+    return read_json(path)
 
 
 @router.post("/api/chat-ai/history")
@@ -52,7 +49,7 @@ def save_chat_session(body: dict):
         "created_at": body.get("created_at", datetime.now().isoformat(timespec="seconds")),
         "messages": body.get("messages", []),
     }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json(path, payload)
     return {"id": session_id, "ok": True}
 
 

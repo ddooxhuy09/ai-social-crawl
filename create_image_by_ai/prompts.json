@@ -65,51 +65,6 @@
         }
     },
     {
-        "id": "suggest_attribute",
-        "prompt": {
-            "role": "Expert amigurumi/crochet designer",
-            "task": "Provide creative and practical variations for a specific attribute of a crochet product.",
-            "input_data": {
-                "main_product_description": "{main_product_description}",
-                "target_attribute": "{target_attribute}",
-                "current_value": "{current_value}"
-            },
-            "instructions": [
-                "Generate exactly 4 creative, trendy, and crochet-friendly suggestions for the 'target_attribute'.",
-                "Ensure the suggestions match the vibe of the 'main_product_description'.",
-                "Keep each suggestion extremely concise (maximum 5 words), suitable for a dropdown menu UI."
-            ],
-            "output_format": {
-                "type": "JSON Array of strings",
-                "rule": "Output ONLY the JSON array. NO conversational text, NO markdown formatting outside the array.",
-                "example_output": "[\"Mũ ếch xanh lá\", \"Mũ nồi họa tiết dâu tây\", \"Băng đô tai thỏ\", \"Mũ len chóp nhọn mùa đông\"]"
-            }
-        }
-    },
-    {
-        "id": "suggest_concepts",
-        "prompt": {
-            "role": "Expert amigurumi/crochet designer and stylist",
-            "task": "Redesign a crochet product by modifying its attribute table to fit a specific new theme/concept.",
-            "input_data": {
-                "main_product_description": "{main_product_description}",
-                "target_concept": "{target_concept}",
-                "current_attributes_table": "{current_attributes_table}"
-            },
-            "instructions": [
-                "Analyze the 'current_attributes_table' and modify the 'value' fields to perfectly match the 'target_concept'.",
-                "You MAY add 1 or 2 new key-value pairs (new attributes) if they strongly enhance the concept (e.g., adding 'Held Accessory' for a Christmas concept).",
-                "Keep the values descriptive but concise (under 8 words) so they can be fed into an image generation prompt later.",
-                "Output in ENGLISH only - all attribute names and values must be in English."
-            ],
-            "output_format": {
-                "type": "JSON Array of Objects",
-                "rule": "Output ONLY a valid JSON array of objects with 'attribute' and 'value' keys in ENGLISH. NO other text.",
-                "example_output": "[\n  {\"attribute\": \"Main Color\", \"value\": \"Warm brown with red and green accents\"},\n  {\"attribute\": \"Accessories\", \"value\": \"Santa hat with white pom-pom and striped scarf\"},\n  {\"attribute\": \"Facial Expression\", \"value\": \"Happy, rosy cheeks\"},\n  {\"attribute\": \"Held Accessory\", \"value\": \"Holding a candy cane\"}\n]"
-            }
-        }
-    },
-    {
         "id": "build_image_prompt",
         "prompt": {
             "role": "Expert AI Image Prompt Engineer for Multimodal Composition",

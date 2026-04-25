@@ -13,8 +13,8 @@ export default function CreateProjectModal({ open, onClose, onSave, newName, set
       <div className="bg-white rounded-2xl shadow-2xl w-[520px] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <p className="text-base font-semibold text-gray-900">Tạo project mới</p>
-          <button type="button" onClick={onClose}
-            className="text-gray-400 hover:text-gray-700 text-lg cursor-pointer px-1">×</button>
+          <Button variant="ghost" type="button" onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 text-xl w-6 h-6 p-0 hover:bg-gray-100 flex items-center justify-center">×</Button>
         </div>
         <div className="overflow-y-auto flex-1 p-5 flex flex-col gap-4">
           <div>

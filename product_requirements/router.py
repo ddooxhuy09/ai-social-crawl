@@ -1,10 +1,10 @@
-import json
-import re
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+from history_utils import read_json, write_json, list_json_dir
+from services.ai_utils import slugify, now_iso
 
 from create_image_by_ai.image_generator import GEMINI_TEXT_MODEL, _get_gemini_client
 from product_requirements.prompts import PRODUCT_REQUIREMENTS_PROMPT
@@ -16,19 +16,8 @@ REQUIREMENTS_DIR = Path("history/product-requirements")
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def _slugify(name: str) -> str:
-    name = re.sub(r"[^\w\s-]", "", (name or "").strip())
-    name = re.sub(r"[\s_]+", "-", name)
-    name = re.sub(r"-{2,}", "-", name)
-    return name.strip("-").lower() or "doc"
-
-
 def _doc_path(doc_name: str) -> Path:
-    return REQUIREMENTS_DIR / f"{_slugify(doc_name)}.json"
-
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return REQUIREMENTS_DIR / f"{slugify(doc_name, fallback='doc')}.json"
 
 
 def _read_doc(doc_name: str) -> dict:
@@ -36,17 +25,14 @@ def _read_doc(doc_name: str) -> dict:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Document not found.")
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
+        return read_json(path)
+    except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"Error reading document: {e}") from e
 
 
 def _write_doc(doc: dict) -> dict:
-    REQUIREMENTS_DIR.mkdir(parents=True, exist_ok=True)
-    doc["updated_at"] = _now()
-    _doc_path(doc["doc_name"]).write_text(
-        json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    doc["updated_at"] = now_iso()
+    write_json(_doc_path(doc["doc_name"]), doc)
     return doc
 
 
@@ -79,22 +65,15 @@ class GenerateRequest(BaseModel):
 
 @router.get("/all")
 async def list_requirements():
-    if not REQUIREMENTS_DIR.exists():
-        return []
-    results = []
-    for path in REQUIREMENTS_DIR.glob("*.json"):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            results.append({
-                "doc_name":    data.get("doc_name", path.stem),
-                "product_name": data.get("product_name", ""),
-                "updated_at":  data.get("updated_at", ""),
-                "has_result":  bool(data.get("result", "").strip()),
-            })
-        except Exception:
-            continue
-    results.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
-    return results
+    return list_json_dir(
+        REQUIREMENTS_DIR,
+        lambda data, path: {
+            "doc_name":     data.get("doc_name", path.stem),
+            "product_name": data.get("product_name", ""),
+            "updated_at":   data.get("updated_at", ""),
+            "has_result":   bool(data.get("result", "").strip()),
+        },
+    )
 
 
 @router.post("/create")
@@ -104,7 +83,7 @@ async def create_requirement_doc(req: CreateDocRequest):
         raise HTTPException(status_code=400, detail="Doc name is required.")
     if _doc_path(doc_name).exists():
         raise HTTPException(status_code=409, detail="A document with this name already exists.")
-    ts = _now()
+    ts = now_iso()
     doc = {
         "doc_name":             doc_name,
         "product_name":         "",
@@ -128,7 +107,7 @@ async def load_requirement_doc(doc_name: str):
 @router.put("/{doc_name}")
 async def save_requirement_doc(doc_name: str, req: SaveDocRequest):
     path = _doc_path(doc_name)
-    existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"created_at": _now()}
+    existing = read_json(path, default={"created_at": now_iso()})
     doc = {
         **existing,
         "doc_name":             req.doc_name or doc_name,
@@ -176,7 +155,7 @@ async def generate_product_requirements(req: GenerateRequest):
     # Auto-save result back to the document
     if req.doc_name:
         path = _doc_path(req.doc_name)
-        existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"created_at": _now()}
+        existing = read_json(path, default={"created_at": now_iso()})
         doc = {
             **existing,
             "doc_name":             req.doc_name,

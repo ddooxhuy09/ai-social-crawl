@@ -17,6 +17,36 @@ HISTORY_DIR = (Path(sys.executable).parent / "history") if getattr(sys, "frozen"
 CRAWL_DIR = HISTORY_DIR / "crawl"
 IMAGE_DIR = HISTORY_DIR / "pinterest_image"
 
+def read_json(path: Path) -> dict:
+  """Read a JSON file and return its contents."""
+  with path.open("r", encoding="utf-8") as f:
+    return json.load(f)
+
+
+def write_json(path: Path, data) -> None:
+  """Write data as JSON to a file."""
+  path.parent.mkdir(parents=True, exist_ok=True)
+  with path.open("w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def list_json_dir(directory: Path, transform=None) -> list:
+  """List all .json files in a directory, sorted newest-first.
+  Optionally transform each loaded dict with transform(data, path).
+  """
+  if not directory.exists():
+    return []
+  files = sorted(directory.glob("*.json"), reverse=True)
+  result = []
+  for path in files:
+    try:
+      data = read_json(path)
+      result.append(transform(data, path) if transform else data)
+    except Exception:
+      pass
+  return result
+
+
 def get_history_bases(project_id: str | None = None) -> List[Path]:
     if project_id:
         return [HISTORY_DIR / "projects" / project_id / "redesign-phase" / "social_crawl"]

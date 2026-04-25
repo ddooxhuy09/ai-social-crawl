@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { API_BASE } from "../../constants";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
 import ProjectSidebar from "./ProjectSidebar";
 import OriginalPhase from "./phases/OriginalPhase";
 import RedesignPhase from "./phases/RedesignPhase";
@@ -106,10 +108,11 @@ export default function ProjectsPage({
 
               return (
                 <React.Fragment key={ph.key}>
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     onClick={() => setActivePhase(ph.key)}
-                    className={`group relative flex items-center gap-3 bg-white transition-all`}
+                    className={`group relative flex items-center gap-3 bg-white transition-all px-0 h-auto hover:bg-transparent`}
                   >
                     {/* Circle Focus */}
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${
@@ -141,7 +144,7 @@ export default function ProjectsPage({
                         {ph.label}
                       </span>
                     </div>
-                  </button>
+                  </Button>
 
                   {/* Connecting Line */}
                   {i < arr.length - 1 && (
@@ -185,13 +188,13 @@ export default function ProjectsPage({
             <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 gap-3">
               <span className="text-5xl">📁</span>
               <p className="text-sm font-medium">Chọn hoặc tạo project để bắt đầu</p>
-              <button
+              <Button
+                variant="sky"
                 type="button"
                 onClick={() => setCreateModal(true)}
-                className="px-4 py-2 rounded-lg bg-sky-500 text-white text-sm font-semibold hover:bg-sky-600 transition-colors"
               >
                 + Tạo project mới
-              </button>
+              </Button>
             </div>
           ) : activePhase === "original" ? (
             <OriginalPhase
@@ -229,9 +232,9 @@ export default function ProjectsPage({
             <h2 className="text-lg font-bold text-gray-900">Tạo project mới</h2>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-gray-700">Tên project</label>
-              <input
+              <Input
                 autoFocus
-                className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                className="text-sm"
                 placeholder="VD: Crochet Blanket Collection"
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
@@ -273,10 +276,8 @@ export default function ProjectsPage({
             </div>
             
             <div className="flex gap-2 justify-end mt-2">
-              <button type="button" onClick={() => setCreateModal(false)}
-                className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Huỷ</button>
-              <button type="button" onClick={handleCreateProject} disabled={!newName.trim()}
-                className="px-4 py-2 rounded-lg bg-sky-500 text-white text-sm font-semibold hover:bg-sky-600 disabled:opacity-50">Tạo</button>
+              <Button variant="outline" type="button" onClick={() => setCreateModal(false)}>Huỷ</Button>
+              <Button variant="sky" type="button" onClick={handleCreateProject} disabled={!newName.trim()}>Tạo</Button>
             </div>
           </div>
         </div>

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Loader2, Sparkles, Image as ImageIcon, Search } from "lucide-react";
+import { Loader2, Sparkles, Image as ImageIcon, Search, X } from "lucide-react";
 import { API_BASE } from "../../../constants";
 import HistoryPickerModal from "../../../components/HistoryPickerModal";
 import { MessageContent } from "../../../components/AttributeTable";
 import ManualUploadModal from "../../../components/ManualUploadModal";
+import { getImageAttributes, buildImagePrompts, generateImages } from "../../../lib/imageAI";
 
 function makeMsg(type, payload) {
   const genId = Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -78,7 +79,7 @@ function ChatAttributeMsg({ msg, onGenerateNewDesign, isBuilding }) {
       </div>
       <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
         <MessageContent
-          msg={{ ...msg, concepts: msg.concepts || [] }}
+          msg={msg}
           onGenerateNewDesign={onGenerateNewDesign}
         />
       </div>
@@ -216,7 +217,7 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
     const kw = manualKeyword.trim();
     if (!kw) return;
     setAddingManual(true);
-    const limit = crawlLimit ? parseInt(crawlLimit) : undefined;
+    const limit = crawlLimit ? parseInt(crawlLimit) : "max";
     try {
       await onAddTaskToQueue(
         { id: `manual-${Date.now()}`, title: `Crawl: ${kw}`, linked_page: "crawl", linked_keyword: kw, limit_per_source: limit, status: "todo" },
@@ -267,6 +268,7 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
 
   // ── AI loading states ────────────────────────────────────────────────────────
   const [isGettingAttributes, setIsGettingAttributes] = useState(false);
+
   const [isBuildingPrompt, setIsBuildingPrompt] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiError, setAiError] = useState("");
@@ -319,14 +321,8 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
         if (url.startsWith("data:")) return p.title || (p.isMain ? "main image" : `ref image ${i}`);
         return url.split("/").pop()?.split("?")[0] || (p.isMain ? "main image" : `ref image ${i}`);
       });
-      const r = await fetch(`${API_BASE}/api/generate-image/attributes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images: base64Images, image_names: imageNames, description: description.trim() || undefined }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || "Lỗi phân tích ảnh");
-      appendMessage(makeMsg("attribute_table", { rows: data.rows, image_names: data.image_names, concepts: [] }));
+      const data = await getImageAttributes(base64Images, imageNames, description.trim());
+      appendMessage(makeMsg("attribute_table", { rows: data.rows, image_names: data.image_names }));
     } catch (e) {
       setAiError(`❌ Get Attributes: ${e.message}`);
     } finally {
@@ -334,19 +330,13 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
     }
   };
 
-  const handleBuildPrompt = async (tableMd) => {
-    if (!tableMd || isBuildingPrompt) return;
+  const handleBuildPrompt = async (tableData) => {
+    if (!tableData?.rows?.length || isBuildingPrompt) return;
     setAiError("");
     setIsBuildingPrompt(true);
     try {
-      const r = await fetch(`${API_BASE}/api/generate-image/build-prompt`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ attribute_table: tableMd }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || "Lỗi build prompt");
-      appendMessage(makeMsg("prompts", { prompts: data.prompts || [] }));
+      const prompts = await buildImagePrompts(tableData.rows, tableData.image_names || []);
+      appendMessage(makeMsg("prompts", { prompts }));
     } catch (e) {
       setAiError(`❌ Build Prompt: ${e.message}`);
     } finally {
@@ -359,20 +349,15 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
     setAiError("");
     setIsGenerating(true);
     try {
-      const r = await fetch(`${API_BASE}/api/generate-image`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, model: "imagen-3.0-generate-002", num_images: 2 }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || "Lỗi generate image");
-      appendMessage(makeMsg("images", { images: data.images || [], prompt }));
+      const images = await generateImages(prompt, 2);
+      appendMessage(makeMsg("images", { images, prompt }));
     } catch (e) {
       setAiError(`❌ Generate Image: ${e.message}`);
     } finally {
       setIsGenerating(false);
     }
   };
+
 
   const handleClearChat = async () => {
     if (!window.confirm("Xóa toàn bộ lịch sử chat?")) return;
@@ -408,7 +393,7 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
               max={200}
               value={crawlLimit}
               onChange={e => setCrawlLimit(e.target.value)}
-              placeholder="60"
+              placeholder="max"
               className="w-20 border border-gray-200 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-300 bg-gray-50 focus:bg-white transition-colors"
               title="Số lượng kết quả mỗi nguồn (mặc định 60)"
             />
@@ -580,6 +565,18 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
               />
             );
             if (msg.type === "images") return <ChatImagesMsg key={msg.id} msg={msg} />;
+            if (msg.type === "loading_idea") return <LoadingBubble key={msg.id} label="Đang phân tích Social Data..." />;
+            if (msg.type === "idea_result") return (
+              <div key={msg.id} className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5 px-1">
+                  <span className="w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center text-xs">💡</span>
+                  <p className="text-[10px] text-gray-400">Design Ideas · {msg.created_at?.slice(0, 16).replace("T", " ")}</p>
+                </div>
+                <div className="bg-white border border-amber-100 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {msg.text}
+                </div>
+              </div>
+            );
             return null;
           })}
 
@@ -655,6 +652,7 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
           onClose={() => setPickerHistory(null)}
         />
       )}
+
     </div>
   );
 }

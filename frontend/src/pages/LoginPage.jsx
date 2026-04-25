@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { API_BASE } from "../constants";
+import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/button";
+import { Label } from "../components/ui/label";
 
 export default function LoginPage({ onLogin, onForgotPassword }) {
   const [email, setEmail] = useState("");
@@ -37,36 +40,34 @@ export default function LoginPage({ onLogin, onForgotPassword }) {
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-700">Email</label>
-            <input
+            <Label>Email</Label>
+            <Input
               type="email"
               required
               autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-gray-700">Mật khẩu</label>
+              <Label>Mật khẩu</Label>
               <button
                 type="button"
                 onClick={onForgotPassword}
-                className="text-xs text-gray-400 hover:text-gray-700 underline"
+                className="text-xs text-gray-400 hover:text-gray-700 underline cursor-pointer"
               >
                 Quên mật khẩu?
               </button>
             </div>
-            <input
+            <Input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
             />
           </div>
 
@@ -76,13 +77,13 @@ export default function LoginPage({ onLogin, onForgotPassword }) {
             </p>
           )}
 
-          <button
+          <Button
             type="submit"
             disabled={loading}
-            className="mt-2 px-4 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="mt-2 w-full"
           >
             {loading ? "Đang đăng nhập..." : "Đăng nhập"}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

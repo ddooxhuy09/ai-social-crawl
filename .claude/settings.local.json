@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(grep -r httpx requirements*.txt)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(npm run:*)",
+      "Bash(C:UsersddooxOneDriveDocumentsai_pinterestetsy-envScriptspython.exe -c ':*)",
+      "Bash(/c/Users/ddoox/OneDrive/Documents/ai_pinterest/etsy-env/Scripts/python.exe -c ':*)"
     ]
   }
 }

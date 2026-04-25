@@ -1,6 +1,7 @@
 import asyncio
 import random
 from undetected_playwright.async_api import async_playwright, Playwright
+from crawlers.utils import _run_async
 import json
 import requests
 import urllib.parse
@@ -229,9 +230,11 @@ async def _crawl_tiktok_async(keyword: str, max_items: int = 20) -> list[dict]:
     return list(all_pins_by_id.values())
 
 
+
+
 def crawl_tiktok_sync(keyword: str, max_items: int = 20) -> list[dict]:
-    """Wrapper sync: crawl TikTok theo keyword, trả về list pin (format PinInfo)."""
-    return asyncio.run(_crawl_tiktok_async(keyword, max_items=max_items))
+    """Wrapper sync: crawl TikTok theo keyword, via _run_async (no hanging cleanup)."""
+    return _run_async(_crawl_tiktok_async(keyword, max_items=max_items))
 
 
 async def open_tiktok_search(keyword: str):

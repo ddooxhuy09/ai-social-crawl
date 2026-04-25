@@ -96,8 +96,8 @@ export default function TaskDetailModal({
             </span>
             <span className="text-gray-400 text-sm font-medium">Chi tiết công việc</span>
           </div>
-          <button type="button" onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-500 transition-colors">✕</button>
+          <Button variant="ghost" type="button" onClick={onClose}
+            className="w-8 h-8 p-0 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-200 transition-colors">✕</Button>
         </div>
 
         {/* Content */}
@@ -178,27 +178,27 @@ export default function TaskDetailModal({
                           <img src={linkDraft.imageData} alt="preview"
                             className="w-full h-32 object-cover rounded-lg border border-sky-200" />
                           <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                            <button type="button"
+                            <Button variant="outline" type="button"
                               onClick={() => imageInputRef.current?.click()}
-                              className="text-xs bg-white text-gray-800 px-3 py-1.5 rounded-lg font-semibold hover:bg-gray-100">
+                              className="text-xs bg-white text-gray-800 px-3 py-1.5 h-auto rounded-lg font-semibold hover:bg-gray-100">
                               Đổi ảnh
-                            </button>
-                            <button type="button"
+                            </Button>
+                            <Button variant="destructive" type="button"
                               onClick={() => setLinkDraft(prev => ({ ...prev, imageData: "", imageName: "" }))}
-                              className="text-xs bg-red-500 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-red-600">
+                              className="text-xs bg-red-500 text-white px-3 py-1.5 h-auto rounded-lg font-semibold hover:bg-red-600">
                               Xóa
-                            </button>
+                            </Button>
                           </div>
                           <p className="text-[10px] text-gray-400 mt-1 truncate">{linkDraft.imageName}</p>
                         </div>
                       ) : (
-                        <button type="button"
+                        <Button variant="outline" type="button"
                           onClick={() => imageInputRef.current?.click()}
                           disabled={imageLoading}
-                          className="w-full h-24 border-2 border-dashed border-sky-200 rounded-lg flex flex-col items-center justify-center gap-1.5 text-sky-400 hover:border-sky-400 hover:bg-sky-50 transition-colors cursor-pointer">
+                          className="w-full h-24 border-2 border-dashed border-sky-200 rounded-lg flex flex-col items-center justify-center gap-1.5 text-sky-400 hover:border-sky-400 hover:bg-sky-50 transition-colors cursor-pointer bg-transparent">
                           <span className="text-2xl">{imageLoading ? "⏳" : "🖼️"}</span>
                           <span className="text-xs font-medium">{imageLoading ? "Loading..." : "Click to upload image"}</span>
-                        </button>
+                        </Button>
                       )}
                       <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                         onChange={e => { if (e.target.files?.[0]) handleImageFile(e.target.files[0]); e.target.value = ""; }} />

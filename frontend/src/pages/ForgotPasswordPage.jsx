@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { API_BASE } from "../constants";
+import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/button";
+import { Label } from "../components/ui/label";
 
 export default function ForgotPasswordPage({ onBack }) {
   const [email, setEmail] = useState("");
@@ -45,7 +48,7 @@ export default function ForgotPasswordPage({ onBack }) {
             <button
               type="button"
               onClick={onBack}
-              className="text-sm text-gray-500 hover:text-gray-800 underline"
+              className="text-sm text-gray-500 hover:text-gray-800 underline cursor-pointer"
             >
               Quay lại đăng nhập
             </button>
@@ -53,15 +56,14 @@ export default function ForgotPasswordPage({ onBack }) {
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-gray-700">Email</label>
-              <input
+              <Label>Email</Label>
+              <Input
                 type="email"
                 required
                 autoFocus
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
               />
             </div>
 
@@ -71,18 +73,18 @@ export default function ForgotPasswordPage({ onBack }) {
               </p>
             )}
 
-            <button
+            <Button
               type="submit"
               disabled={loading}
-              className="mt-2 px-4 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="mt-2 w-full"
             >
               {loading ? "Đang gửi..." : "Gửi link đặt lại mật khẩu"}
-            </button>
+            </Button>
 
             <button
               type="button"
               onClick={onBack}
-              className="text-sm text-gray-500 hover:text-gray-800 underline text-center"
+              className="text-sm text-gray-500 hover:text-gray-800 underline cursor-pointer text-center"
             >
               Quay lại đăng nhập
             </button>

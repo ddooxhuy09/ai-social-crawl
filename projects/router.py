@@ -1,7 +1,6 @@
-from typing import List
+from typing import List, Optional, Union
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import Optional
 
 from projects.db import (
     _load_projects,
@@ -36,7 +35,7 @@ class QueueItem(BaseModel):
     createdAt: Optional[str] = None
     updatedAt: Optional[str] = None
     sources: Optional[List[str]] = None
-    limit_per_source: Optional[int] = None
+    limit_per_source: Union[int, str, None] = None
 
 class QueueResponse(BaseModel):
     running: bool

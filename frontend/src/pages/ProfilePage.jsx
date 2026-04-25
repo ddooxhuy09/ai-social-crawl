@@ -1,5 +1,7 @@
 import { useState, useRef } from "react";
 import { API_BASE } from "../constants";
+import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/button";
 
 function Avatar({ url, email, size = 80 }) {
   const initials = (email || "?")[0].toUpperCase();
@@ -105,12 +107,13 @@ export default function ProfilePage({ authUser, onClose, onUpdateUser }) {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-bold text-gray-900">Hồ sơ của bạn</h2>
-          <button
+          <Button
+            variant="ghost"
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            className="w-8 h-8 px-0 text-gray-400 hover:text-gray-600 rounded-full"
           >
             ✕
-          </button>
+          </Button>
         </div>
 
         {/* Avatar section */}
@@ -147,29 +150,26 @@ export default function ProfilePage({ authUser, onClose, onUpdateUser }) {
         <div className="pt-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Đổi mật khẩu</h3>
           <form onSubmit={handleUpdatePassword} className="flex flex-col gap-3">
-            <input
+            <Input
               type="password"
               required
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               placeholder="Mật khẩu hiện tại"
-              className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
             />
-            <input
+            <Input
               type="password"
               required
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Mật khẩu mới"
-              className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
             />
-            <input
+            <Input
               type="password"
               required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Xác nhận mật khẩu mới"
-              className="px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
             />
             {pwError && (
               <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-1.5">
@@ -181,13 +181,13 @@ export default function ProfilePage({ authUser, onClose, onUpdateUser }) {
                 {pwSuccess}
               </p>
             )}
-            <button
+            <Button
               type="submit"
               disabled={pwLoading}
-              className="px-4 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="mt-1"
             >
               {pwLoading ? "Đang cập nhật..." : "Cập nhật mật khẩu"}
-            </button>
+            </Button>
           </form>
         </div>
       </div>

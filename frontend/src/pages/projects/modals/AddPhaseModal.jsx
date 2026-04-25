@@ -13,19 +13,19 @@ export default function AddPhaseModal({ open, onClose, onAddTemplate, onAddCusto
       <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <p className="text-base font-semibold text-gray-900">Thêm phase</p>
-          <button type="button" onClick={onClose}
-            className="text-gray-400 hover:text-gray-700 text-lg cursor-pointer px-1">×</button>
+          <Button variant="ghost" type="button" onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 text-xl w-6 h-6 p-0 hover:bg-gray-100 flex items-center justify-center">×</Button>
         </div>
         <div className="overflow-y-auto flex-1 p-5 flex flex-col gap-4">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Template có sẵn</p>
             <div className="flex flex-col gap-1.5">
               {PHASE_TEMPLATES.map(tpl => (
-                <button key={tpl.key} type="button" onClick={() => onAddTemplate(tpl)}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-left cursor-pointer">
+                <Button variant="outline" key={tpl.key} type="button" onClick={() => onAddTemplate(tpl)}
+                  className="flex items-center justify-start gap-3 px-3 py-2.5 h-auto rounded-lg border-gray-200 hover:bg-gray-50 text-left cursor-pointer font-normal">
                   <span className="text-lg">{tpl.icon}</span>
                   <span className="text-sm font-medium text-gray-700">{tpl.name}</span>
-                </button>
+                </Button>
               ))}
             </div>
           </div>

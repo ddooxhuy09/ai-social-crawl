@@ -1,19 +1,22 @@
 import React from "react";
-import { Search, ShoppingBag, ImageIcon, FolderKanban, GalleryHorizontalEnd, Sparkles, ClipboardList, MessageSquarePlus, Image } from "lucide-react";
+import { NavLink } from "react-router-dom";
+import { Search, ShoppingBag, ImageIcon, FolderKanban, Sparkles, ClipboardList, MessageSquarePlus, Heart, Globe } from "lucide-react";
 import { cn } from "../lib/utils";
 
 const NAV_ITEMS = [
-  { id: "crawl", label: "Crawl theo keyword", icon: Search },
-  { id: "hunt", label: "Etsy Hunt", icon: ShoppingBag },
-  { id: "etsy-listing", label: "Etsy Listing AI", icon: Sparkles },
-  { id: "pinterest-image", label: "Crawl by Image", icon: ImageIcon },
-  { id: "projects", label: "Projects", icon: FolderKanban },
-  { id: "main-image", label: "Main Image", icon: Image },
-  { id: "chat-create-image", label: "Chat Create Image", icon: MessageSquarePlus },
-  { id: "requirements", label: "Product Requirements", icon: ClipboardList },
+  { id: "crawl",               label: "Crawl theo keyword",  icon: Search,          to: "/"                   },
+  { id: "hunt",                label: "Etsy Hunt",           icon: ShoppingBag,     to: "/hunt"               },
+  { id: "etsy-listing",        label: "Etsy Listing AI",     icon: Sparkles,        to: "/etsy-listing"       },
+  { id: "pinterest-image",     label: "Crawl by Image",      icon: ImageIcon,       to: "/pinterest-image"    },
+  { id: "projects",            label: "Projects",            icon: FolderKanban,    to: "/projects"           },
+  { id: "chat-create-image",   label: "Chat Create Image",   icon: MessageSquarePlus, to: "/chat-create-image" },
+  { id: "product-insights",    label: "Product Insights",     icon: Globe,             to: "/product-insights"    },
+
+  { id: "user-favorite-items", label: "User Favorite Items", icon: Heart,           to: "/user-favorite-items" },
+  { id: "requirements",        label: "Product Requirements",icon: ClipboardList,   to: "/requirements"       },
 ];
 
-export default function AppSidebar({ activeTab, onSelect }) {
+export default function AppSidebar() {
   return (
     <aside className="flex flex-col w-[220px] min-h-screen bg-zinc-950 text-zinc-100 shrink-0">
       {/* Logo / Title */}
@@ -28,21 +31,21 @@ export default function AppSidebar({ activeTab, onSelect }) {
 
       {/* Nav */}
       <nav className="flex flex-col gap-1 p-3 flex-1">
-        {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
-          <button
+        {NAV_ITEMS.map(({ id, label, icon: Icon, to }) => (
+          <NavLink
             key={id}
-            type="button"
-            onClick={() => onSelect(id)}
-            className={cn(
+            to={to}
+            end={to === "/"}
+            className={({ isActive }) => cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-left transition-colors",
-              activeTab === id
+              isActive
                 ? "bg-zinc-700 text-white"
                 : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
             )}
           >
             <Icon size={16} className="shrink-0" />
             {label}
-          </button>
+          </NavLink>
         ))}
       </nav>
 

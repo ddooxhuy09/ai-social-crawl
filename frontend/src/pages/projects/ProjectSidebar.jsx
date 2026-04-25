@@ -39,10 +39,10 @@ export default function ProjectSidebar({ projects, selectedId, onSelect, onDelet
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                     </svg>
                   ) : (
-                    <button type="button"
+                    <Button variant="ghost" type="button"
                       onClick={e => { e.stopPropagation(); onDelete(p.id); }}
-                      className="text-gray-200 hover:text-red-400 cursor-pointer text-xs shrink-0 hidden group-hover:inline"
-                    >×</button>
+                      className="text-gray-200 hover:text-red-400 text-xs shrink-0 hidden group-hover:inline px-1 h-auto py-0 bg-transparent"
+                    >×</Button>
                   )}
                 </div>
                 <div className="flex items-center gap-0.5 mt-2">

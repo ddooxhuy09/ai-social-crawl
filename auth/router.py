@@ -2,17 +2,10 @@ import os
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from pydantic import BaseModel
-from supabase import create_client
+
+from services.supabase_client import get_supabase, new_supabase_client
 
 router = APIRouter()
-
-_supabase = None
-
-def get_supabase():
-    global _supabase
-    if _supabase is None:
-        _supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
-    return _supabase
 
 
 class LoginBody(BaseModel):
@@ -86,7 +79,7 @@ async def update_password(body: UpdatePasswordBody, request: Request):
         user_info = get_supabase().auth.get_user(token)
         email = user_info.user.email
         # Re-authenticate to verify current password and get a fresh session
-        temp = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+        temp = new_supabase_client()
         temp.auth.sign_in_with_password({"email": email, "password": body.current_password})
         temp.auth.update_user({"password": body.new_password})
         return {"message": "Mật khẩu đã được cập nhật thành công"}
@@ -123,7 +116,7 @@ class ResetPasswordBody(BaseModel):
 async def reset_password(body: ResetPasswordBody):
     try:
         # Create a fresh client per request to avoid session conflicts
-        client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+        client = new_supabase_client()
         client.auth.set_session(body.access_token, body.refresh_token)
         client.auth.update_user({"password": body.password})
         return {"message": "Mật khẩu đã được cập nhật thành công"}

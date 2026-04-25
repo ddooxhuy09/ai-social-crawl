@@ -14,6 +14,7 @@ import time
 import uuid
 from pathlib import Path
 
+import httpx
 import requests
 from PIL import Image
 from undetected_playwright.async_api import async_playwright
@@ -21,7 +22,7 @@ from undetected_playwright.async_api import async_playwright
 import random
 
 from crawlers.pinterest.utils import build_pin_info, get_pws_context, parse_cookie_string
-from crawlers.pinterest.crawler import fetch_pin_detail_via_page, fetch_related_pins_via_page
+from crawlers.pinterest.crawler import fetch_pin_detail_http, fetch_related_pins_http
 
 
 # ── JavaScript helpers (chạy bên trong browser context) ─────────────────────
@@ -466,13 +467,19 @@ async def upload_pin(
     # Try flashlight search once — rarely works for brand new pins
     similar_pins = await get_visual_similar_pins(page, pin_id, image_signature, scroll_rounds=scroll_rounds)
 
+    # Build a cookie string from the live browser session for httpx calls below
+    raw_cookies = await page.context.cookies()
+    cookies_header = "; ".join(f"{c['name']}={c['value']}" for c in raw_cookies)
+
     if not similar_pins:
         print("   ⚠️ Không tìm được pin tương tự — ảnh chưa được index bởi Pinterest ML.")
         print("   🔄 Fallback: lấy Related pins theo pin_id...")
         try:
-            related_ids = await fetch_related_pins_via_page(
-                page, pin_id, pws_ctx, max_related=scroll_rounds * 25, search_query=title
-            )
+            async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+                client.headers["Cookie"] = cookies_header
+                related_ids = await fetch_related_pins_http(
+                    client, pin_id, pws_ctx, max_related=scroll_rounds * 25, search_query=title
+                )
             similar_pin_ids = [str(r) for r in related_ids if r]
             print(f"   Related pins: {len(similar_pin_ids)} pin ID")
         except Exception as exc:
@@ -484,15 +491,17 @@ async def upload_pin(
 
     similar_pin_infos: list[dict] = []
     if pws_ctx and similar_pin_ids:
-        for i, sid in enumerate(similar_pin_ids, 1):
-            await asyncio.sleep(random.uniform(0.4, 1.0))
-            try:
-                data = await fetch_pin_detail_via_page(page, sid, pws_ctx)
-            except Exception as exc:
-                print(f"⚠️ Lỗi PinResource cho pin {sid}: {exc}")
-                continue
-            if data:
-                similar_pin_infos.append(build_pin_info(data))
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+            client.headers["Cookie"] = cookies_header
+            for i, sid in enumerate(similar_pin_ids, 1):
+                await asyncio.sleep(random.uniform(0.4, 1.0))
+                try:
+                    data = await fetch_pin_detail_http(client, sid, pws_ctx)
+                except Exception as exc:
+                    print(f"⚠️ Lỗi PinResource cho pin {sid}: {exc}")
+                    continue
+                if data:
+                    similar_pin_infos.append(build_pin_info(data))
         print(f"✅ Fetch chi tiết xong: {len(similar_pin_infos)}/{len(similar_pin_ids)} pin")
 
     return {

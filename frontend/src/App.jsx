@@ -1,11 +1,14 @@
 import React, { useEffect, useState, useCallback, useRef, useTransition } from "react";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { API_BASE } from "./constants";
 import CrawlPage from "./pages/CrawlPage";
 import HuntPage from "./pages/HuntPage";
 import PinterestImagePage from "./pages/PinterestImagePage";
 import ProjectsPage from "./pages/projects";
-import MainImagePage from "./pages/MainImagePage";
 import ChatCreateImagePage from "./pages/ChatCreateImagePage";
+import ProductInsightsPage from "./pages/ProductInsightsPage";
+
+import UserFavoriteItemsPage from "./pages/UserFavoriteItemsPage";
 import RequirementsPage from "./pages/product-requirements";
 import EtsyListingPage from "./pages/EtsyListingPage";
 import AppSidebar from "./components/AppSidebar";
@@ -15,6 +18,7 @@ import LoginPage from "./pages/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ProfilePage from "./pages/ProfilePage";
+import { TaskQueueProvider, useTaskQueue } from "./context/TaskQueueContext";
 
 // ── Global fetch patch: attach Bearer token to all /api/ requests ──────────────
 const _origFetch = window.fetch.bind(window);
@@ -72,32 +76,38 @@ export default function App() {
     window.location.reload();
   };
 
-  if (recoveryTokens) {
-    return (
-      <ResetPasswordPage
-        accessToken={recoveryTokens.access_token}
-        refreshToken={recoveryTokens.refresh_token}
-        onSuccess={handleResetSuccess}
-      />
-    );
-  }
-
-  if (!authToken) {
-    if (authPage === "forgot") return <ForgotPasswordPage onBack={() => setAuthPage("login")} />;
-    return <LoginPage onLogin={handleLogin} onForgotPassword={() => setAuthPage("forgot")} />;
-  }
-
-  return <MainApp authUser={authUser} setAuthUser={setAuthUser} onLogout={handleLogout} />;
+  return (
+    <BrowserRouter>
+      {recoveryTokens ? (
+        <ResetPasswordPage
+          accessToken={recoveryTokens.access_token}
+          refreshToken={recoveryTokens.refresh_token}
+          onSuccess={handleResetSuccess}
+        />
+      ) : !authToken ? (
+        authPage === "forgot"
+          ? <ForgotPasswordPage onBack={() => setAuthPage("login")} />
+          : <LoginPage onLogin={handleLogin} onForgotPassword={() => setAuthPage("forgot")} />
+      ) : (
+        <MainApp authUser={authUser} setAuthUser={setAuthUser} onLogout={handleLogout} />
+      )}
+    </BrowserRouter>
+  );
 }
 
 // ── Main app (only mounts when authenticated) ──────────────────────────────────
+// Owns all project/crawl/navigation state and wraps children in TaskQueueProvider.
+// Queue state lives entirely in TaskQueueProvider — MainApp never reads it directly.
 function MainApp({ authUser, setAuthUser, onLogout }) {
+  const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
 
   const handleUpdateUser = (updated) => {
     setAuthUser(updated);
     localStorage.setItem("auth_user", JSON.stringify(updated));
   };
+
+  // ── Crawl state ──────────────────────────────────────────────────────────────
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -105,7 +115,7 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Projects state
+  // ── Projects state ───────────────────────────────────────────────────────────
   const [projects, setProjects] = useState([]);
   const [projLoading, setProjLoading] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
@@ -113,14 +123,11 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
   const [loadingProjectId, setLoadingProjectId] = useState(null);
   const selectedProjectIdRef = useRef(null);
   const projectCacheRef = useRef(new Map()); // id → full project data
-  const prevQueueRef = useRef([]);
 
   const [isPending, startTransition] = useTransition();
 
   const handleSelectProject = useCallback((id) => {
-    // Immediate sidebar highlight — must be outside startTransition
     setSelectedProjectId(id);
-    // Deferred heavy content swap — keep isPending spinner while React renders
     startTransition(() => {
       if (!id) {
         setSelectedProject(null);
@@ -129,11 +136,6 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
       }
     });
   }, []);
-
-  // Queue state (synced from server)
-  const [queue, setQueue] = useState([]);
-  const [isWorkerRunning, setIsWorkerRunning] = useState(false);
-  const [queueModalOpen, setQueueModalOpen] = useState(false);
 
   // Keep ref in sync for use inside callbacks without stale closure
   useEffect(() => { selectedProjectIdRef.current = selectedProjectId; }, [selectedProjectId]);
@@ -154,11 +156,9 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
   // Load full detail of one project — serves from cache if available
   const loadSelectedProject = useCallback(async (id) => {
     if (!id) return;
-    // Serve cached version instantly, then refresh in background
     if (projectCacheRef.current.has(id)) {
       setSelectedProject(projectCacheRef.current.get(id));
     } else {
-      // No cache → clear stale data immediately so old project never shows for new id
       setSelectedProject(null);
       setLoadingProjectId(id);
     }
@@ -167,7 +167,6 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
       if (res.ok) {
         const data = await res.json();
         projectCacheRef.current.set(id, data);
-        // Only update if this id is still the one being requested
         if (selectedProjectIdRef.current === id) {
           setSelectedProject(data);
         }
@@ -176,7 +175,6 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
     finally { setLoadingProjectId(null); }
   }, []);
 
-  // When selected project changes, do NOT null out — swap when ready to avoid blank flash
   useEffect(() => {
     if (selectedProjectId) {
       loadSelectedProject(selectedProjectId);
@@ -185,7 +183,6 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
     }
   }, [selectedProjectId, loadSelectedProject]);
 
-  // Fetch only metadata list — no selectedProjectId dependency
   const fetchProjects = useCallback(async () => {
     setProjLoading(true);
     try {
@@ -200,43 +197,6 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
     }
   }, []);
 
-  // Fetch only queue state — called every 5s
-  const fetchQueue = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/projects/queue`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const newTasks = data.tasks || [];
-
-      // If a running task just finished, reload the selected project
-      const wasRunning = prevQueueRef.current.filter(t => t.status === "running");
-      if (wasRunning.length > 0) {
-        const stillRunning = newTasks.filter(t => t.status === "running");
-        if (stillRunning.length < wasRunning.length && selectedProjectIdRef.current) {
-          projectCacheRef.current.delete(selectedProjectIdRef.current); // bust cache — task result changed
-          loadSelectedProject(selectedProjectIdRef.current);
-        }
-      }
-
-      prevQueueRef.current = newTasks;
-      setQueue(newTasks);
-      setIsWorkerRunning(data.running || false);
-    } catch (e) {
-      console.error("fetchQueue failed:", e);
-    }
-  }, [loadSelectedProject]);
-
-  // Initial load — parallel
-  useEffect(() => {
-    Promise.all([fetchProjects(), fetchQueue(), loadHistory()]);
-  }, [fetchProjects, fetchQueue, loadHistory]);
-
-  // Poll only queue every 5s (lightweight)
-  useEffect(() => {
-    const id = setInterval(fetchQueue, 5000);
-    return () => clearInterval(id);
-  }, [fetchQueue]);
-
   const saveProject = useCallback(async (updated) => {
     try {
       await fetch(`${API_BASE}/api/projects/${updated.id}`, {
@@ -244,9 +204,8 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updated),
       });
-      projectCacheRef.current.set(updated.id, updated); // keep cache fresh
+      projectCacheRef.current.set(updated.id, updated);
       setSelectedProject(updated);
-      // Update only status fields in the metadata list
       setProjects(prev => prev.map(p => p.id !== updated.id ? p : {
         ...p,
         original: { status: updated.original?.status || "empty" },
@@ -256,111 +215,37 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
     } catch (e) { console.error(e); }
   }, []);
 
-  const addToQueue = async (task, projId, projName, phaseName) => {
-    if (queue.some(q => q.taskId === task.id && (q.status === "pending" || q.status === "running"))) {
-      alert("Task này đã có trong hàng đợi!");
-      return;
-    }
-
-    const queueItem = {
-      id: "task_" + Date.now(),
-      title: task.title,
-      keyword: task.linked_keyword,
-      page: task.linked_page,
-      imageData: task.linked_image_data || null,
-      imageName: task.linked_image_name || null,
-      projectId: projId,
-      projectName: projName,
-      phaseName: phaseName,
-      taskId: task.id,
-      status: "pending",
-      ...(task.limit_per_source ? { limit_per_source: task.limit_per_source } : {}),
-    };
-
-    try {
-      const res = await fetch(`${API_BASE}/api/projects/queue/add`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(queueItem),
-      });
-      if (!res.ok) throw new Error("Thêm vào hàng đợi thất bại");
-      fetchQueue(); // Only refresh queue, not all projects
-    } catch (e) {
-      alert(e.message);
-    }
-  };
-
-  const retryQueueItem = async (id) => {
-    console.log("Retry requested for", id);
-  };
-
-  const updateQueueLocal = async (newTasks) => {
-    const payload = Array.isArray(newTasks)
-      ? { running: isWorkerRunning, tasks: newTasks }
-      : newTasks;
-    setQueue(payload.tasks);
-    await fetch(`${API_BASE}/api/projects/queue`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  };
-
-  const toggleWorker = async (running) => {
-    setIsWorkerRunning(running);
-    await fetch(`${API_BASE}/api/projects/queue/status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ running }),
-    });
-  };
-
-  const initialTab = window.location.pathname.startsWith("/hunt") ? "hunt" :
-    window.location.pathname.startsWith("/etsy-listing") ? "etsy-listing" :
-    window.location.pathname.startsWith("/pinterest-image") ? "pinterest-image" :
-    window.location.pathname.startsWith("/projects") ? "projects" :
-    window.location.pathname.startsWith("/main-image") ? "main-image" :
-    window.location.pathname.startsWith("/chat-create-image") ? "chat-create-image" :
-    window.location.pathname.startsWith("/requirements") ? "requirements" : "crawl";
-  const [activeTab, setActiveTab] = useState(initialTab);
-
+  // Initial load (queue is fetched independently by TaskQueueProvider)
   useEffect(() => {
-    const onPopState = () => {
-      setActiveTab(
-        window.location.pathname.startsWith("/hunt") ? "hunt" :
-        window.location.pathname.startsWith("/etsy-listing") ? "etsy-listing" :
-        window.location.pathname.startsWith("/pinterest-image") ? "pinterest-image" :
-        window.location.pathname.startsWith("/projects") ? "projects" :
-        window.location.pathname.startsWith("/main-image") ? "main-image" :
-        window.location.pathname.startsWith("/chat-create-image") ? "chat-create-image" :
-        window.location.pathname.startsWith("/requirements") ? "requirements" : "crawl"
-      );
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+    Promise.all([fetchProjects(), loadHistory()]);
+  }, [fetchProjects, loadHistory]);
 
-  const switchTab = (tab) => {
-    setActiveTab(tab);
-    const pathMap = {
-      hunt: "/hunt",
-      "etsy-listing": "/etsy-listing",
-      "pinterest-image": "/pinterest-image",
-      projects: "/projects",
-      "main-image": "/main-image",
-      "chat-create-image": "/chat-create-image",
-      requirements: "/requirements"
-    };
-    const newPath = pathMap[tab] || "/";
-    if (window.location.pathname !== newPath) window.history.pushState({}, "", newPath);
-  };
+  // ── Callback fired by TaskQueueProvider when a running task finishes ─────────
+  const handleTaskComplete = useCallback(() => {
+    if (selectedProjectIdRef.current) {
+      projectCacheRef.current.delete(selectedProjectIdRef.current); // bust cache
+      loadSelectedProject(selectedProjectIdRef.current);
+    }
+  }, [loadSelectedProject]);
 
+  // ── Transient navigation state (one-time props for destination pages) ────────
   const [initHistoryId, setInitHistoryId] = useState(null);
   const [initImageHistoryId, setInitImageHistoryId] = useState(null);
   const [initListingName, setInitListingName] = useState(null);
   const [initPickContext, setInitPickContext] = useState(null);
 
   const handleNavigate = (tab, kw, hId = null, pickContext = null) => {
+    const pathMap = {
+      hunt: "/hunt",
+      "etsy-listing": "/etsy-listing",
+      "pinterest-image": "/pinterest-image",
+      projects: "/projects",
+      "chat-create-image": "/chat-create-image",
+      "product-insights": "/product-insights",
+
+      "user-favorite-items": "/user-favorite-items",
+      requirements: "/requirements",
+    };
     if (tab === "crawl") {
       if (kw) setKeyword(kw);
       setInitHistoryId(hId);
@@ -368,7 +253,7 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
     }
     if (tab === "pinterest-image") { setInitImageHistoryId(hId); }
     if (tab === "etsy-listing")    { setInitListingName(kw || null); }
-    switchTab(tab);
+    navigate(pathMap[tab] || "/");
   };
 
   const handlePickOriginal = async (pin, projectId) => {
@@ -381,122 +266,68 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
       setInitPickContext(null);
       setSelectedProjectId(projectId);
       await loadSelectedProject(projectId);
-      switchTab("projects");
+      navigate("/projects");
     } catch (e) { console.error(e); }
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-gray-100 font-sans">
-      <AppSidebar activeTab={activeTab} onSelect={switchTab} />
-      <main className="flex flex-col flex-1 overflow-hidden bg-white">
-        <header className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-          <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">Pinterest Crawler</h1>
-            <p className="text-[13px] text-gray-500 mt-0.5">Quản lý task tự động và lịch sử crawl đa nền tảng.</p>
-          </div>
-          <div className="flex gap-2 items-center">
-            {(() => {
-              const isRunning = queue.some(t => t.status === "running");
-              return (
-                <button
-                  type="button"
-                  onClick={() => setQueueModalOpen(true)}
-                  className={`px-4 py-1.5 rounded-full border text-sm font-semibold transition-all flex items-center gap-2.5 ${
-                    isRunning
-                      ? "bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-100 animate-pulse"
-                      : "bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:bg-gray-50 shadow-sm"
-                  }`}
-                >
-                  <span className="text-lg">{isRunning ? "⏳" : "📋"}</span>
-                  <span>{isRunning ? "Running..." : "Tasks"}</span>
-                  {queue.length > 0 && (
-                    <span className={`min-w-[20px] h-5 flex items-center justify-center rounded-full text-[11px] px-1.5 ${
-                      isRunning ? "bg-white text-emerald-600" : "bg-gray-100 text-gray-600"
-                    }`}>
-                      {queue.length}
-                    </span>
-                  )}
-                </button>
-              );
-            })()}
-            <div className="flex items-center gap-2 ml-1 pl-3 border-l border-gray-100">
-              <button
-                type="button"
-                onClick={() => setProfileOpen(true)}
-                title="Hồ sơ"
-                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-              >
-                {authUser?.avatar_url ? (
-                  <img
-                    src={`${API_BASE}${authUser.avatar_url}`}
-                    alt="avatar"
-                    className="w-7 h-7 rounded-full object-cover border border-gray-200"
-                  />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-semibold text-gray-600 border border-gray-200">
-                    {(authUser?.email || "?")[0].toUpperCase()}
-                  </div>
-                )}
-                <span className="text-[12px] text-gray-500 hidden sm:block">{authUser?.email}</span>
-              </button>
-              <button
-                type="button"
-                onClick={onLogout}
-                title="Đăng xuất"
-                className="px-3 py-1.5 rounded-full border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-              >
-                Đăng xuất
-              </button>
+    <TaskQueueProvider onTaskComplete={handleTaskComplete}>
+      <div className="flex h-screen w-screen overflow-hidden bg-gray-100 font-sans">
+        <AppSidebar />
+        <main className="flex flex-col flex-1 overflow-hidden bg-white">
+
+          {/* AppHeader consumes TaskQueueContext for queue badge + QueueModal */}
+          <AppHeader
+            authUser={authUser}
+            onLogout={onLogout}
+            onOpenProfile={() => setProfileOpen(true)}
+          />
+
+          {historyLoading && (
+            <div className="mx-6 mt-3 text-xs font-medium text-sky-700 bg-sky-50 border border-sky-100 rounded-lg px-3 py-2 flex items-center gap-2 shrink-0">
+              <span className="animate-spin text-sky-500">⏳</span> Đang đồng bộ lịch sử hệ thống...
             </div>
+          )}
+          {error && <div className="mx-6 mt-3 text-[13px] text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 shrink-0">{error}</div>}
+
+          <div className="flex-1 overflow-auto">
+            <Routes>
+              <Route path="/" element={
+                <CrawlPage keyword={keyword} setKeyword={setKeyword} loading={loading} setLoading={setLoading} error={error} setError={setError} result={result} setResult={setResult} history={history} loadHistory={loadHistory} historyLoading={historyLoading} initialHistoryId={initHistoryId} onInitConsumed={() => setInitHistoryId(null)} pickContext={initPickContext} onPickOriginal={handlePickOriginal} />
+              } />
+              <Route path="/hunt" element={
+                <HuntPage setResult={setResult} loadHistory={loadHistory} />
+              } />
+              <Route path="/pinterest-image" element={
+                <PinterestImagePage history={history} loadHistory={loadHistory} initialHistoryId={initImageHistoryId} onInitConsumed={() => setInitImageHistoryId(null)} />
+              } />
+              <Route path="/projects" element={
+                // ProjectsRoute consumes TaskQueueContext for queue/addToQueue
+                <ProjectsRoute
+                  isPending={isPending}
+                  onNavigate={handleNavigate}
+                  projects={projects}
+                  setProjects={setProjects}
+                  loading={projLoading}
+                  selectedId={selectedProjectId}
+                  setSelectedId={handleSelectProject}
+                  selectedProject={selectedProject}
+                  saveProject={saveProject}
+                  loadingProjectId={loadingProjectId}
+                />
+              } />
+              <Route path="/chat-create-image" element={<ChatCreateImagePage />} />
+              <Route path="/requirements" element={<RequirementsPage />} />
+              <Route path="/product-insights" element={<ProductInsightsPage />} />
+
+              <Route path="/user-favorite-items" element={<UserFavoriteItemsPage />} />
+              <Route path="/etsy-listing" element={
+                <EtsyListingPage initialListingName={initListingName} onInitConsumed={() => setInitListingName(null)} />
+              } />
+            </Routes>
           </div>
-        </header>
-
-        <QueueModal
-          open={queueModalOpen}
-          onClose={() => setQueueModalOpen(false)}
-          queue={queue}
-          isWorkerRunning={isWorkerRunning}
-          onToggleRunning={toggleWorker}
-          isQueueRunning={queue.some(t => t.status === "running")}
-          currentQueueTask={queue.find(t => t.status === "running")}
-          onClear={async () => {
-            setQueue([]);
-            setIsWorkerRunning(false);
-            await fetch(`${API_BASE}/api/projects/queue`, { method: "DELETE" });
-          }}
-          onUpdate={updateQueueLocal}
-          onRetry={retryQueueItem}
-        />
-
-        {historyLoading && (
-          <div className="mx-6 mt-3 text-xs font-medium text-sky-700 bg-sky-50 border border-sky-100 rounded-lg px-3 py-2 flex items-center gap-2 shrink-0">
-            <span className="animate-spin text-sky-500">⏳</span> Đang đồng bộ lịch sử hệ thống...
-          </div>
-        )}
-        {error && <div className="mx-6 mt-3 text-[13px] text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 shrink-0">{error}</div>}
-
-        <div className="flex-1 overflow-auto">
-          {activeTab === "crawl" ? (
-            <CrawlPage keyword={keyword} setKeyword={setKeyword} loading={loading} setLoading={setLoading} error={error} setError={setError} result={result} setResult={setResult} history={history} loadHistory={loadHistory} historyLoading={historyLoading} initialHistoryId={initHistoryId} onInitConsumed={() => setInitHistoryId(null)} pickContext={initPickContext} onPickOriginal={handlePickOriginal} />
-          ) : activeTab === "pinterest-image" ? (
-            <PinterestImagePage history={history} loadHistory={loadHistory} initialHistoryId={initImageHistoryId} onInitConsumed={() => setInitImageHistoryId(null)} />
-          ) : activeTab === "hunt" ? (
-            <HuntPage setResult={setResult} loadHistory={loadHistory} />
-          ) : activeTab === "projects" ? (
-            <ErrorBoundary>
-              <ProjectsPage isPending={isPending} onNavigate={handleNavigate} projects={projects} setProjects={setProjects} loading={projLoading} selectedId={selectedProjectId} setSelectedId={handleSelectProject} selectedProject={selectedProject} saveProject={saveProject} queue={queue} setQueue={setQueue} onAddTaskToQueue={addToQueue} loadingProjectId={loadingProjectId} />
-            </ErrorBoundary>
-          ) : activeTab === "main-image" ? (
-            <MainImagePage />
-          ) : activeTab === "chat-create-image" ? (
-            <ChatCreateImagePage />
-          ) : activeTab === "requirements" ? (
-            <RequirementsPage />
-          ) : activeTab === "etsy-listing" ? (
-            <EtsyListingPage initialListingName={initListingName} onInitConsumed={() => setInitListingName(null)} />
-          ) : null}
-        </div>
-      </main>
+        </main>
+      </div>
 
       {profileOpen && (
         <ProfilePage
@@ -505,6 +336,124 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
           onUpdateUser={handleUpdateUser}
         />
       )}
-    </div>
+    </TaskQueueProvider>
+  );
+}
+
+// ── AppHeader — consumes TaskQueueContext ──────────────────────────────────────
+// Renders the top header bar (title, queue badge button, user avatar/logout) and
+// the QueueModal. Isolated here so MainApp never has to touch queue state.
+function AppHeader({ authUser, onLogout, onOpenProfile }) {
+  const {
+    queue,
+    isWorkerRunning,
+    queueModalOpen,
+    setQueueModalOpen,
+    toggleWorker,
+    updateQueueLocal,
+    retryQueueItem,
+    clearQueue,
+  } = useTaskQueue();
+
+  const isRunning = queue.some(t => t.status === "running");
+
+  return (
+    <>
+      <header className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+        <div>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">Pinterest Crawler</h1>
+          <p className="text-[13px] text-gray-500 mt-0.5">Quản lý task tự động và lịch sử crawl đa nền tảng.</p>
+        </div>
+        <div className="flex gap-2 items-center">
+          <button
+            type="button"
+            onClick={() => setQueueModalOpen(true)}
+            className={`px-4 py-1.5 rounded-full border text-sm font-semibold transition-all flex items-center gap-2.5 ${
+              isRunning
+                ? "bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-100 animate-pulse"
+                : "bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:bg-gray-50 shadow-sm"
+            }`}
+          >
+            <span className="text-lg">{isRunning ? "⏳" : "📋"}</span>
+            <span>{isRunning ? "Running..." : "Tasks"}</span>
+            {queue.length > 0 && (
+              <span className={`min-w-[20px] h-5 flex items-center justify-center rounded-full text-[11px] px-1.5 ${
+                isRunning ? "bg-white text-emerald-600" : "bg-gray-100 text-gray-600"
+              }`}>
+                {queue.length}
+              </span>
+            )}
+          </button>
+
+          <div className="flex items-center gap-2 ml-1 pl-3 border-l border-gray-100">
+            <button
+              type="button"
+              onClick={onOpenProfile}
+              title="Hồ sơ"
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
+              {authUser?.avatar_url ? (
+                <img
+                  src={`${API_BASE}${authUser.avatar_url}`}
+                  alt="avatar"
+                  className="w-7 h-7 rounded-full object-cover border border-gray-200"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-semibold text-gray-600 border border-gray-200">
+                  {(authUser?.email || "?")[0].toUpperCase()}
+                </div>
+              )}
+              <span className="text-[12px] text-gray-500 hidden sm:block">{authUser?.email}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onLogout}
+              title="Đăng xuất"
+              className="px-3 py-1.5 rounded-full border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+            >
+              Đăng xuất
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <QueueModal
+        open={queueModalOpen}
+        onClose={() => setQueueModalOpen(false)}
+        queue={queue}
+        isWorkerRunning={isWorkerRunning}
+        onToggleRunning={toggleWorker}
+        isQueueRunning={isRunning}
+        currentQueueTask={queue.find(t => t.status === "running")}
+        onClear={clearQueue}
+        onUpdate={updateQueueLocal}
+        onRetry={retryQueueItem}
+      />
+    </>
+  );
+}
+
+// ── ProjectsRoute — consumes TaskQueueContext ──────────────────────────────────
+// Bridges the /projects route with queue state from context so ProjectsPage never
+// has to know where that state comes from.
+function ProjectsRoute({ isPending, onNavigate, projects, setProjects, loading, selectedId, setSelectedId, selectedProject, saveProject, loadingProjectId }) {
+  const { queue, addToQueue } = useTaskQueue();
+  return (
+    <ErrorBoundary>
+      <ProjectsPage
+        isPending={isPending}
+        onNavigate={onNavigate}
+        projects={projects}
+        setProjects={setProjects}
+        loading={loading}
+        selectedId={selectedId}
+        setSelectedId={setSelectedId}
+        selectedProject={selectedProject}
+        saveProject={saveProject}
+        queue={queue}
+        onAddTaskToQueue={addToQueue}
+        loadingProjectId={loadingProjectId}
+      />
+    </ErrorBoundary>
   );
 }

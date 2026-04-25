@@ -3,6 +3,7 @@ import random
 import json
 from pathlib import Path
 from undetected_playwright.async_api import async_playwright
+from crawlers.utils import _run_async
 
 _BASE_DIR = Path(__file__).resolve().parent.parent
 _COOKIES_DIR = _BASE_DIR / "cookies_instagram"
@@ -162,10 +163,12 @@ async def _crawl_instagram_async(
     return {"photos": photos, "reels": reels}
 
 
+
+
 def crawl_instagram_all_sync(
     keyword: str, max_items: int = 20
 ) -> dict[str, list[dict]]:
-    return asyncio.run(_crawl_instagram_async(keyword, max_items=max_items))
+    return _run_async(_crawl_instagram_async(keyword, max_items=max_items))
 
 
 def crawl_instagram_sync(keyword: str, max_items: int = 20) -> list[dict]:

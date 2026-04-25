@@ -19,7 +19,7 @@ except ImportError:
 # --------------------------------------------
 
 from projects.db import _load_queue, _save_queue, archive_task
-from crawlers.router import normalize_to_display, CRAWL_SOURCES
+from crawlers.router import CRAWL_SOURCES
 from crawlers import (
     crawl_pins_sync,
     crawl_instagram_all_sync,
@@ -27,7 +27,7 @@ from crawlers import (
     crawl_reddit_sync,
     crawl_youtube_sync,
 )
-from history_utils import save_history
+from history_utils import save_history, normalize_to_display
 
 async def task_worker_loop():
     print("[WORKER] Starting Global Task Worker...")
@@ -260,7 +260,7 @@ async def execute_crawl_keyword(task: dict):
 async def execute_crawl_image(task: dict):
     # Logic mượn từ crawlers/router.py:pinterest_upload_and_search
     from crawlers import upload_pin_sync
-    from history_utils import get_default_pinterest_cookie, save_history, normalize_to_display
+    from crawlers.router import get_default_pinterest_cookie
     import base64
     import tempfile
     import os

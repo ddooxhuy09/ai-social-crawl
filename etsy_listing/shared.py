@@ -1,10 +1,17 @@
-import json
 import re
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import HTTPException
+
+from history_utils import read_json, write_json, list_json_dir
+from services.ai_utils import (
+    now_iso,
+    strip_code_fence,
+    raise_for_ai_error,
+    slugify as _slugify_canonical,
+)
 
 
 HISTORY_DIR = Path("history/hunt/keyword")
@@ -16,14 +23,13 @@ LISTING_ASSET_DIR = Path("history/etsy-listing/listing_assets")
 SOURCE_FILENAME_RE = re.compile(r"^etsy_keywords_(.+?)_(\d{8}_\d{6})\.csv$")
 
 
-def now_iso() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+# now_iso, strip_code_fence, raise_for_ai_error imported from services.ai_utils above
 
 
 def _read_json(path: Path, context: str) -> dict | list:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
+        return read_json(path)
+    except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"Lỗi đọc {context}: {e}") from e
 
 
@@ -44,32 +50,9 @@ def get_prompt_config(prompt_id: str) -> dict:
     return prompt_config.get("prompt", {})
 
 
-def strip_code_fence(text: str) -> str:
-    cleaned = text.strip()
-    if cleaned.startswith("```json"):
-        return cleaned.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    if cleaned.startswith("```"):
-        return cleaned.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    return cleaned
-
-
-def raise_for_ai_error(e: Exception, context: str = "AI") -> None:
-    """Re-raise Gemini errors with the right HTTP status code."""
-    err_str = str(e)
-    if "503" in err_str or "UNAVAILABLE" in err_str or "high demand" in err_str.lower():
-        raise HTTPException(
-            status_code=503,
-            detail="Gemini is currently overloaded. Please wait a moment and try again.",
-        ) from e
-    raise HTTPException(status_code=502, detail=f"{context}: {err_str}") from e
-
-
 def slugify_listing_name(name: str) -> str:
     """Convert a listing name to a URL/filename-safe slug."""
-    name = re.sub(r"[^\w\s-]", "", (name or "").strip())
-    name = re.sub(r"[\s_]+", "-", name)
-    name = re.sub(r"-{2,}", "-", name)
-    return name.strip("-").lower() or "listing"
+    return _slugify_canonical(name, fallback="listing")
 
 
 def ensure_listing_name(listing_name: str) -> str:
@@ -172,9 +155,8 @@ def save_listing_history(history: dict) -> dict:
     )
     normalized["updated_at"] = now_iso()
 
-    LISTING_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     history_path = get_listing_history_path(normalized["listing_name"])
-    history_path.write_text(json.dumps(normalized, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json(history_path, normalized)
     return normalized
 
 
@@ -218,29 +200,21 @@ def build_listing_history_response(history: dict) -> dict:
 
 def list_all_listing_histories() -> list[dict]:
     """Return a summary of all listing histories, sorted by updated_at desc."""
-    if not LISTING_HISTORY_DIR.exists():
-        return []
-    results = []
-    for path in LISTING_HISTORY_DIR.glob("*.json"):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                continue
-            results.append({
-                "listing_name": data.get("listing_name", path.stem),
-                "source_filename": data.get("source_filename", ""),
-                "seed_keyword": data.get("seed_keyword", ""),
-                "updated_at": data.get("updated_at", ""),
-                "has_req1": bool(data.get("req1")),
-                "has_req2": bool(data.get("req2")),
-                "has_req3": bool(data.get("req3")),
-                "has_req4": bool(data.get("req4")),
-                "has_req5": bool(data.get("req5")),
-            })
-        except Exception:
-            continue
-    results.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
-    return results
+    def _extract(data, path):
+        if not isinstance(data, dict):
+            return None
+        return {
+            "listing_name":   data.get("listing_name", path.stem),
+            "source_filename": data.get("source_filename", ""),
+            "seed_keyword":   data.get("seed_keyword", ""),
+            "updated_at":     data.get("updated_at", ""),
+            "has_req1": bool(data.get("req1")),
+            "has_req2": bool(data.get("req2")),
+            "has_req3": bool(data.get("req3")),
+            "has_req4": bool(data.get("req4")),
+            "has_req5": bool(data.get("req5")),
+        }
+    return list_json_dir(LISTING_HISTORY_DIR, _extract)
 
 
 def load_legacy_ai_processed(seed_keyword: str) -> dict | None:

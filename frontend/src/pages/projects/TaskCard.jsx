@@ -1,5 +1,6 @@
 import React from "react";
 import { PAGE_OPTIONS } from "./constants";
+import { Button } from "../../components/ui/button";
 
 export default function TaskCard({
   task,
@@ -89,41 +90,41 @@ export default function TaskCard({
         <div className="px-3 py-2 flex items-center gap-2 border-t border-gray-50/80 bg-gray-50/30 rounded-b-xl flex-wrap">
           {/* Queueable: "Add to Queue" button */}
           {isQueueable && (
-            <button type="button"
+            <Button variant="outline" type="button"
               onClick={(e) => { e.stopPropagation(); onRunTask && onRunTask(task); }}
               disabled={isRunning || taskInQueue}
-              className={`text-[0.65rem] px-2.5 py-1 rounded-md font-semibold flex items-center gap-1 shadow-sm transition-all ${
+              className={`text-[0.65rem] px-2.5 py-1 h-auto rounded-md font-semibold flex items-center gap-1 shadow-sm transition-all ${
                 (isRunning || taskInQueue)
-                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                  : "bg-emerald-100 border border-emerald-200 text-emerald-700 hover:bg-emerald-500 hover:text-white"
+                  ? "bg-gray-200 text-gray-500 cursor-not-allowed border-gray-200"
+                  : "bg-emerald-100 border-emerald-200 text-emerald-700 hover:bg-emerald-500 hover:text-white hover:border-emerald-500"
               }`}
               title={taskInQueue ? "Task này đã có trong hàng đợi" : "Thêm vào hàng đợi"}
             >
               <span>{taskInQueue ? "⏳" : "+"}</span>
               <span>{taskInQueue ? "Queued" : "Add to Queue"}</span>
-            </button>
+            </Button>
           )}
 
           {/* Non-queueable: "Open" navigate button */}
           {!isQueueable && (
-            <button type="button"
+            <Button variant="outline" type="button"
               onClick={(e) => { e.stopPropagation(); onNavigate && onNavigate(navigateTarget, task.linked_keyword, task.last_history_id); }}
-              className="text-[0.65rem] px-2.5 py-1 rounded-md bg-sky-100 border border-sky-200 text-sky-700 hover:bg-sky-500 hover:text-white transition-all shadow-sm font-semibold flex items-center gap-1"
+              className="text-[0.65rem] px-2.5 py-1 h-auto rounded-md bg-sky-100 border-sky-200 text-sky-700 hover:bg-sky-500 hover:text-white hover:border-sky-500 transition-all shadow-sm font-semibold flex items-center gap-1"
               title={`Open ${pageOpt.label}`}
             >
               {pageOpt.icon} Open {pageOpt.label}
-            </button>
+            </Button>
           )}
 
           {/* Result button: shown when crawl finished and has history */}
           {isQueueable && hasResult && (
-            <button type="button"
+            <Button variant="outline" type="button"
               onClick={(e) => { e.stopPropagation(); onNavigate && onNavigate(navigateTarget, task.linked_keyword, task.last_history_id); }}
-              className="text-[0.65rem] px-2.5 py-1 rounded-md bg-amber-100 border border-amber-200 text-amber-700 hover:bg-amber-500 hover:text-white transition-all shadow-sm font-bold flex items-center gap-1"
+              className="text-[0.65rem] px-2.5 py-1 h-auto rounded-md bg-amber-100 border-amber-200 text-amber-700 hover:bg-amber-500 hover:text-white hover:border-amber-500 transition-all shadow-sm font-bold flex items-center gap-1"
               title="Xem kết quả"
             >
               📊 Result
-            </button>
+            </Button>
           )}
         </div>
       )}

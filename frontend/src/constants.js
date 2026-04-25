@@ -93,46 +93,6 @@ export const HUNT_FILTERS = [
   },
 ];
 
-export const CLASSIFY_FILTERS = [
-  {
-    group: "score", label: "Score", rows: [
-      {
-        key: "score", label: "Score", presets: [
-          [null, 30, "< 30"], [30, 50, "30~50"], [50, 70, "50~70"], [70, null, "≥ 70"],
-        ]
-      },
-    ]
-  },
-  {
-    group: "favorites", label: "Favorites", rows: [
-      {
-        key: "favorites", label: "Favorites", presets: [
-          [0, 100e3, "0~100K"], [100e3, 1e6, "100K~1M"], [1e6, 10e6, "1M~10M"],
-        ]
-      },
-    ]
-  },
-  {
-    group: "competition", label: "Competition", rows: [
-      {
-        key: "competition", label: "Competition", presets: [
-          [null, 10000, "< 10K"], [10000, 20000, "10K~20K"], [20000, 50000, "20K~50K"],
-          [50000, 100000, "50K~100K"], [100000, null, "≥ 100K"],
-        ]
-      },
-    ]
-  },
-  {
-    group: "sales", label: "Sales", rows: [
-      {
-        key: "sales", label: "Sales", presets: [
-          [0, 10e3, "0~10K"], [10e3, 500e3, "10K~500K"], [500e3, 1e6, "500K~1M"],
-        ]
-      },
-    ]
-  },
-];
-
 export const SOURCE_COLORS = {
   pinterest: "#e60023",
   instagram: "#e1306c",

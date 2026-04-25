@@ -108,9 +108,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
   const [aiSearchFilter, setAiSearchFilter] = useState("");
   const [aiSort, setAiSort] = useState({ col: "score", dir: "desc" });
 
-  const [req1Mode, setReq1Mode] = useState("csv"); // "csv" | "manual"
   const [manualKeywordsInput, setManualKeywordsInput] = useState("");
-  const [manualSeedKeyword, setManualSeedKeyword] = useState("");
   const [manualKeywordsLoading, setManualKeywordsLoading] = useState(false);
 
   const [customAttributes, setCustomAttributes] = useState("");
@@ -451,7 +449,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
         body: JSON.stringify({
           listing_name: selectedListing,
           keywords: manualKeywordsInput,
-          seed_keyword: manualSeedKeyword || "manual",
+          seed_keyword: "manual",
         }),
       });
       const data = await res.json();
@@ -1013,82 +1011,25 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                 )}
               </div>
 
-              <div className="px-6 py-5 flex flex-col gap-3">
-                <div className="flex bg-gray-100 p-1.5 rounded-xl self-start">
-                  <button onClick={() => setReq1Mode("csv")} className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${req1Mode === "csv" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Từ file CSV</button>
-                  <button onClick={() => setReq1Mode("manual")} className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${req1Mode === "manual" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Nhập tay</button>
-                </div>
-                
-                {req1Mode === "csv" ? (
-                  embedded ? (
-                    /* ── Embedded: CSV selected from left sidebar ── */
-                    <div className="flex items-center gap-3">
-                      {selectedCsvFile ? (
-                        <>
-                          <span className="flex-1 text-sm text-gray-700 truncate">📄 {selectedCsvFile}</span>
-                          <Button variant="sky" disabled={aiFilterLoading} onClick={handleAiFilterKeywords} className="shrink-0">
-                            {aiFilterLoading ? "Filtering..." : req1Data ? "Re-run" : "Run REQ1"}
-                          </Button>
-                        </>
-                      ) : (
-                        <p className="text-sm text-gray-400 italic">← Select a CSV from the left panel</p>
-                      )}
-                    </div>
-                  ) : (
-                    /* ── Normal: select dropdown ── */
-                    <div className="flex gap-2">
-                      <select
-                        value={selectedCsvFile}
-                        onChange={(e) => setSelectedCsvFile(e.target.value)}
-                        className="flex-1 border border-gray-200 bg-gray-50 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
-                      >
-                        <option value="">-- Select EtsyHunt CSV --</option>
-                        {csvFiles.map((item) => (
-                          <option key={item.filename} value={item.filename}>
-                            {item.filename} {item.size_kb ? `(${item.size_kb} KB)` : ""}
-                          </option>
-                        ))}
-                      </select>
-                      <Button
-                        variant="sky"
-                        disabled={!selectedCsvFile || aiFilterLoading}
-                        onClick={handleAiFilterKeywords}
-                        className="shrink-0"
-                      >
-                        {aiFilterLoading ? "Filtering..." : req1Data ? "Re-run" : "Run REQ1"}
-                      </Button>
-                    </div>
-                  )
-                ) : (
-                  /* ── Manual input ── */
-                  <div className="flex flex-col gap-3">
-                    <div className="flex gap-2">
-                      <input 
-                        type="text" 
-                        placeholder="Seed keyword (tuỳ chọn)" 
-                        className={inputCls("focus:ring-sky-400")} 
-                        value={manualSeedKeyword} 
-                        onChange={e => setManualSeedKeyword(e.target.value)} 
-                      />
-                    </div>
-                    <div>
-                      <textarea
-                        className={inputCls("focus:ring-sky-400")}
-                        style={{ minHeight: 96 }}
-                        placeholder="Nhập keywords thủ công (cách nhau bằng phẩy hoặc xuống dòng)..."
-                        value={manualKeywordsInput}
-                        onChange={e => setManualKeywordsInput(e.target.value)}
-                      />
-                    </div>
-                    <Button 
-                      variant="sky" 
-                      disabled={!manualKeywordsInput.trim() || manualKeywordsLoading} 
-                      onClick={handleManualKeywords}
-                    >
-                      {manualKeywordsLoading ? "Đang lưu..." : "Lưu Keywords"}
-                    </Button>
+              <div className="px-6 py-5 flex flex-col gap-4">
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <textarea
+                      className={inputCls("focus:ring-sky-400")}
+                      style={{ minHeight: 96 }}
+                      placeholder="Nhập keywords thủ công (cách nhau bằng phẩy hoặc xuống dòng)..."
+                      value={manualKeywordsInput}
+                      onChange={e => setManualKeywordsInput(e.target.value)}
+                    />
                   </div>
-                )}
+                  <Button 
+                    variant="sky" 
+                    disabled={!manualKeywordsInput.trim() || manualKeywordsLoading} 
+                    onClick={handleManualKeywords}
+                  >
+                    {manualKeywordsLoading ? "Đang lưu..." : "Lưu Keywords"}
+                  </Button>
+                </div>
 
                 {req1Data && (
                   <div className="border border-gray-100 rounded-xl overflow-hidden mt-2">

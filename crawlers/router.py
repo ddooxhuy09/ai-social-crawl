@@ -45,7 +45,7 @@ class KeywordRequest(BaseModel):
     keyword: str
     project_id: str | None = None
     sources: list[str] | None = None
-    limit_per_source: int | None = None
+    limit_per_source: int | str | None = None
     pinterest_scroll_rounds: int | None = None
     pinterest_headless: bool | None = None
     pinterest_mode: str | None = None
@@ -367,7 +367,7 @@ async def create_search(req: KeywordRequest):
         "title": f"Crawl: {kw}",
         "keyword": kw,
         "sources": req.sources or list(CRAWL_SOURCES),
-        "limit_per_source": req.limit_per_source or 60,
+        "limit_per_source": req.limit_per_source or "max",
         "status": "pending",
         "phaseName": "redesign", # Mặc định
         "createdAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
