@@ -2,6 +2,7 @@
 Shared utilities for all crawler modules.
 """
 import asyncio
+import sys
 
 
 def _run_async(coro):
@@ -10,7 +11,10 @@ def _run_async(coro):
     shutdown_default_executor() — which blocks indefinitely when
     undetected_playwright leaves internal WebSocket threads alive.
     """
-    loop = asyncio.new_event_loop()
+    if sys.platform == "win32":
+        loop = asyncio.ProactorEventLoop()
+    else:
+        loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
         return loop.run_until_complete(coro)

@@ -16,3 +16,4 @@ pypdf
 httpx
 tavily-python
 pytrends
+python-dotenv
