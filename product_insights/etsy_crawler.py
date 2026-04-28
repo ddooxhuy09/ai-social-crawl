@@ -103,8 +103,8 @@ async def crawl_etsy_reviews(
 
         # Navigate to listing
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            await page.wait_for_timeout(2500)
+            await page.goto(url, wait_until="domcontentloaded", timeout=90_000)
+            await page.wait_for_timeout(5000)
         except Exception:
             pass
 
@@ -120,9 +120,9 @@ async def crawl_etsy_reviews(
                 await captcha_done_event.wait()
             else:
                 await asyncio.sleep(180)
-            await page.wait_for_timeout(2000)
+            await page.wait_for_timeout(4000)
 
-        await page.wait_for_timeout(5000)
+        await page.wait_for_timeout(10_000)
 
         product_name = ""
         try:
@@ -265,7 +265,7 @@ async def crawl_etsy_reviews(
         # ── Extract description (Playwright for JS-rendered content) ───────────
         try:
             desc_sel = "p[data-product-details-description-text-content]"
-            await page.wait_for_selector(desc_sel, timeout=8_000)
+            await page.wait_for_selector(desc_sel, timeout=20_000)
             read_more_btn = await page.query_selector("button[data-read-more='true']")
             if read_more_btn:
                 await read_more_btn.click()
@@ -292,7 +292,7 @@ async def crawl_etsy_reviews(
             """)
             if csrf_token and shop_id:
                 break
-            await page.wait_for_timeout(2000)
+            await page.wait_for_timeout(4000)
 
         if not csrf_token or not shop_id:
             await browser.close()
@@ -345,7 +345,7 @@ async def crawl_etsy_reviews(
             if page_num >= total_pages:
                 break
             page_num += 1
-            await page.wait_for_timeout(800)
+            await page.wait_for_timeout(1500)
 
         await browser.close()
 

@@ -220,12 +220,15 @@ async def _playwright_phase_async(
     max_pins: int = _DEFAULT_MAX_PINS,
     scroll_rounds: int = 5,
     headless: bool = _DEFAULT_HEADLESS,
+    cookie_string: str = "",
 ) -> tuple | None:
     """
     Phase 1 only: open browser, scroll, collect pin IDs + cookies.
     Returns (pws_ctx, all_pin_ids, cookies_header) or None on failure.
     Event loop is closed by _run_async() immediately after this returns.
     """
+    from crawlers.pinterest.utils import parse_cookie_string
+
     url = f"https://www.pinterest.com/search/pins/?q={keyword}&rs=typed"
     all_pin_ids: list[str] = []
     pws_ctx: dict | None = None
@@ -235,6 +238,9 @@ async def _playwright_phase_async(
         browser = await p.chromium.launch(headless=headless)
         try:
             context = await browser.new_context()
+            if cookie_string:
+                await context.add_cookies(parse_cookie_string(cookie_string))
+                print("🍪 Injected Pinterest account cookies.")
             page = await context.new_page()
 
             await page.goto(url, wait_until="domcontentloaded")
@@ -459,10 +465,11 @@ def crawl_pins_sync(keyword: str, **kwargs) -> list[dict]:
     mode = kwargs.get("mode", "default")
     saves_min = kwargs.get("saves_min", 0)
     repins_min = kwargs.get("repins_min", 0)
+    cookie_string = kwargs.get("cookie_string", "")
 
     print(f"[Pinterest] Phase 1: Playwright crawl for '{keyword}'...")
     phase1 = _run_async(
-        _playwright_phase_async(keyword, max_pins=max_pins, scroll_rounds=scroll_rounds, headless=headless)
+        _playwright_phase_async(keyword, max_pins=max_pins, scroll_rounds=scroll_rounds, headless=headless, cookie_string=cookie_string)
     )
     if not phase1:
         return []

@@ -3,6 +3,9 @@ import asyncio
 import os
 from pathlib import Path
 
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from dotenv import load_dotenv
 load_dotenv()
 

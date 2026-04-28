@@ -8,6 +8,8 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from crawlers.utils import _run_async
+
 from history_utils import HISTORY_DIR
 
 router = APIRouter(tags=["product_insights"])
@@ -126,7 +128,7 @@ async def _run_crawl(product_id: str, folder: Path, url: str):
     try:
         from product_insights.etsy_crawler import crawl_etsy_reviews
 
-        result = await crawl_etsy_reviews(url)
+        result = await asyncio.to_thread(lambda: _run_async(crawl_etsy_reviews(url)))
 
         product_info = {
             "product_name": result.get("product_name", meta.get("name", "")),
