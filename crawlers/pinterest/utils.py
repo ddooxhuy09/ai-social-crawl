@@ -110,13 +110,16 @@ def parse_cookie_string(cookie_str: str) -> list[dict]:
             continue
         name, _, value = part.partition("=")
         name = name.strip()
+        value = value.strip()
+        if value.startswith('"') and value.endswith('"'):
+            value = value[1:-1]
         cookies.append({
             "name": name,
-            "value": value.strip(),
+            "value": value,
             "domain": ".pinterest.com",
             "path": "/",
             "httpOnly": name in ("_pinterest_sess", "__Secure-s_a"),
-            "secure": name.startswith("__Secure"),
+            "secure": True,
             "sameSite": "Lax",
         })
     return cookies

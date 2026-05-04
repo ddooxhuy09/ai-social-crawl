@@ -19,6 +19,7 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ProfilePage from "./pages/ProfilePage";
 import { TaskQueueProvider, useTaskQueue } from "./context/TaskQueueContext";
+import CookiePopover from "./components/CookiePopover";
 
 // ── Global fetch patch: attach Bearer token to all /api/ requests ──────────────
 const _origFetch = window.fetch.bind(window);
@@ -413,6 +414,8 @@ function AppHeader({ authUser, onLogout, onOpenProfile }) {
             >
               Đăng xuất
             </button>
+
+            <CookiePopover />
           </div>
         </div>
       </header>

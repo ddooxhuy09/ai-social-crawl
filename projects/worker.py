@@ -192,17 +192,28 @@ async def execute_crawl_keyword(task: dict):
     project_id = task.get("projectId")
     
     # Load saved Pinterest cookie (if any)
-    from crawlers.router import PINTEREST_COOKIE_PATH
-    import json as _json
+    from crawlers.router import get_default_pinterest_cookie, PINTEREST_COOKIE_CACHE_PATH
     _pinterest_cookie = ""
     try:
-        if PINTEREST_COOKIE_PATH.exists():
-            _pinterest_cookie = _json.loads(PINTEREST_COOKIE_PATH.read_text(encoding="utf-8")).get("cookie_string", "")
-    except Exception:
-        pass
+        _pinterest_cookie = get_default_pinterest_cookie().get("cookie_string", "")
+    except Exception as e:
+        print(f"[WORKER] Không tải được Pinterest cookie: {e}")
+
+    def _mark_cookie_expired():
+        try:
+            import time as _time
+            PINTEREST_COOKIE_CACHE_PATH.write_text(
+                __import__("json").dumps({"valid": False, "reason": "expired", "cached_at": _time.time()}),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
 
     # Logic mượn từ crawlers/router.py
     async def crawl_pinterest():
+        if not _pinterest_cookie or "_auth=1" not in _pinterest_cookie:
+            _mark_cookie_expired()
+            raise Exception("COOKIE_EXPIRED: Cookie Pinterest không hợp lệ hoặc đã hết hạn. Vui lòng cập nhật cookie mới.")
         await asyncio.sleep(random.uniform(0, 2))
         return await asyncio.to_thread(crawl_pins_sync, kw, max_pins=limit, cookie_string=_pinterest_cookie)
 

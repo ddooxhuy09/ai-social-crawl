@@ -35,7 +35,6 @@ function HistoryRow({ item, onLoad, onDownload, onDelete }) {
 export default function PinterestImagePage({ history, loadHistory, initialHistoryId, onInitConsumed }) {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  const [cookieString, setCookieString] = useState("");
   const [headless] = useState(true);
   const [scrollRounds, setScrollRounds] = useState(2);
   const [loading, setLoading] = useState(false);
@@ -44,13 +43,6 @@ export default function PinterestImagePage({ history, loadHistory, initialHistor
   const [filterText, setFilterText] = useState("");
   const [sortBy, setSortBy] = useState("default");
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
-
-  useEffect(() => {
-    fetch(`${API_BASE}/api/pinterest/default_cookie`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.cookie_string) setCookieString(data.cookie_string); })
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (!initialHistoryId) return;
@@ -68,13 +60,11 @@ export default function PinterestImagePage({ history, loadHistory, initialHistor
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!imageFile) { setError("Vui lòng chọn ảnh."); return; }
-    if (!cookieString.trim()) { setError("Cookie Pinterest chưa được load. Vui lòng restart backend."); return; }
     setLoading(true);
     setError("");
     setResult(null);
     const form = new FormData();
     form.append("file", imageFile);
-    form.append("cookie_string", cookieString);
     form.append("headless", headless ? "true" : "false");
     form.append("scroll_rounds", String(scrollRounds));
     try {

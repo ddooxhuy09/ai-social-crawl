@@ -109,30 +109,7 @@ export default function CrawlPage({
   const [pinterestMode, setPinterestMode] = useState("default"); // "default" | "saves" | "repins"
   const [pinterestSavesMin, setPinterestSavesMin] = useState(100);
   const [pinterestRepinsMin, setPinterestRepinsMin] = useState(50);
-  const [pinterestCookie, setPinterestCookie] = useState("");
-  const [cookieSaveStatus, setCookieSaveStatus] = useState("");
 
-  // Load saved Pinterest cookie on mount
-  useEffect(() => {
-    fetch(`${API_BASE}/api/pinterest/default_cookie`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.cookie_string) setPinterestCookie(d.cookie_string); })
-      .catch(() => {});
-  }, []);
-
-  const savePinterestCookie = async () => {
-    try {
-      const fd = new FormData();
-      fd.append("cookie_string", pinterestCookie);
-      const res = await fetch(`${API_BASE}/api/pinterest/save_cookie`, { method: "POST", body: fd });
-      if (!res.ok) throw new Error();
-      setCookieSaveStatus("saved");
-    } catch {
-      setCookieSaveStatus("error");
-    } finally {
-      setTimeout(() => setCookieSaveStatus(""), 2500);
-    }
-  };
 
   const isBusy = loading || searchImageLoading || searchPromptLoading;
 
@@ -401,26 +378,6 @@ export default function CrawlPage({
                         )}
                       </span>
                     </label>
-                  </div>
-
-                  {/* Cookie */}
-                  <div className="flex flex-col gap-1.5">
-                    <p className="text-[0.7rem] font-medium text-gray-600">Cookie tài khoản Pinterest</p>
-                    <textarea
-                      rows={3}
-                      value={pinterestCookie}
-                      onChange={e => setPinterestCookie(e.target.value)}
-                      placeholder="Dán cookie string vào đây (ví dụ: _pinterest_sess=...; _auth=...)"
-                      className="w-full rounded border border-pink-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-pink-300 resize-none font-mono"
-                    />
-                    <div className="flex items-center gap-2">
-                      <Button type="button" size="xs" variant="outline" onClick={savePinterestCookie}>
-                        Lưu cookie
-                      </Button>
-                      {cookieSaveStatus === "saved" && <span className="text-[0.65rem] text-green-600">Đã lưu</span>}
-                      {cookieSaveStatus === "error" && <span className="text-[0.65rem] text-red-500">Lỗi lưu</span>}
-                      {pinterestCookie && <span className="text-[0.65rem] text-pink-500">Đã có cookie — crawler sẽ dùng tài khoản của bạn</span>}
-                    </div>
                   </div>
 
                 </div>

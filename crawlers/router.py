@@ -4,9 +4,12 @@ import json
 import os
 import random
 import tempfile
+import time
 from io import StringIO
 from pathlib import Path
 from typing import List
+
+import requests as req_lib
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -37,6 +40,8 @@ router = APIRouter(tags=["crawlers"])
 
 CRAWL_SOURCES: tuple[str, ...] = ("pinterest", "instagram", "tiktok", "reddit", "youtube")
 PINTEREST_COOKIE_PATH = Path("cookies_pinterest/cookie_1.json")
+PINTEREST_COOKIE_CACHE_PATH = Path("cookies_pinterest/cookie_check_cache.json")
+_COOKIE_CACHE_TTL = 300  # seconds — reuse browser result for 5 min
 
 
 # ── Pydantic Models ────────────────────────────────────────────────────────────
@@ -394,15 +399,112 @@ def get_default_pinterest_cookie():
     return {"cookie_string": data.get("cookie_string", "")}
 
 
+def _normalize_cookie_input(raw: str) -> str:
+    """Accept either a plain cookie string or a browser-extension JSON export.
+
+    Browser extensions (e.g. EditThisCookie, Cookie-Editor) export cookies as:
+      {"url": "...", "cookies": [{"name": "csrftoken", "value": "abc", ...}, ...]}
+    This converts that format to a plain semicolon-separated cookie string.
+    """
+    stripped = raw.strip()
+    if not stripped.startswith("{"):
+        return raw
+    try:
+        data = json.loads(stripped)
+        cookies = data.get("cookies", [])
+        if not cookies:
+            return raw
+        return "; ".join(f"{c['name']}={c['value']}" for c in cookies if c.get("name"))
+    except Exception:
+        return raw
+
+
 @router.post("/api/pinterest/save_cookie")
 def save_default_pinterest_cookie(cookie_string: str = Form(...)):
-    """Save a Pinterest cookie string to disk."""
+    """Save a Pinterest cookie string to disk. Accepts both plain cookie strings
+    and browser-extension JSON exports."""
+    normalized = _normalize_cookie_input(cookie_string)
     PINTEREST_COOKIE_PATH.parent.mkdir(exist_ok=True)
     PINTEREST_COOKIE_PATH.write_text(
-        json.dumps({"cookie_string": cookie_string}, ensure_ascii=False, indent=2),
+        json.dumps({"cookie_string": normalized}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    PINTEREST_COOKIE_CACHE_PATH.unlink(missing_ok=True)
     return {"ok": True}
+
+
+@router.get("/api/pinterest/check_cookie")
+async def check_pinterest_cookie():
+    """Validate the saved Pinterest cookie by launching a real browser session."""
+    if not PINTEREST_COOKIE_PATH.exists():
+        return {"valid": False, "reason": "no_cookie"}
+
+    data = json.loads(PINTEREST_COOKIE_PATH.read_text(encoding="utf-8"))
+    cookie_str = data.get("cookie_string", "")
+    if not cookie_str.strip():
+        return {"valid": False, "reason": "empty_cookie"}
+
+    # Return cached result if fresh enough (avoids relaunching browser on every poll)
+    if PINTEREST_COOKIE_CACHE_PATH.exists():
+        try:
+            cache = json.loads(PINTEREST_COOKIE_CACHE_PATH.read_text(encoding="utf-8"))
+            if time.time() - cache.get("cached_at", 0) < _COOKIE_CACHE_TTL:
+                return {k: v for k, v in cache.items() if k != "cached_at"}
+        except Exception:
+            pass
+
+    result = await asyncio.to_thread(_check_cookie_with_browser, cookie_str)
+    try:
+        PINTEREST_COOKIE_CACHE_PATH.write_text(
+            json.dumps({**result, "cached_at": time.time()}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+    return result
+
+
+def _check_cookie_with_browser(cookie_str: str) -> dict:
+    """Launch a headless browser, inject cookies, and verify Pinterest login."""
+    from undetected_playwright.sync_api import sync_playwright
+    from crawlers.pinterest.utils import parse_cookie_string
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                context = browser.new_context(
+                    viewport={"width": 1280, "height": 800},
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/131.0.0.0 Safari/537.36"
+                    ),
+                )
+                context.add_cookies(parse_cookie_string(cookie_str))
+                page = context.new_page()
+
+                resp = page.goto("https://www.pinterest.com", wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_timeout(2000)
+
+                current_url = page.url
+                if "pinterest.com/login" in current_url or "pinterest.com/auth" in current_url:
+                    return {"valid": False, "reason": "expired"}
+
+                if resp and resp.status in (301, 302, 401, 403):
+                    return {"valid": False, "reason": "expired"}
+
+                is_auth = page.evaluate("() => document.cookie.includes('_auth=1')")
+                if not is_auth:
+                    return {"valid": False, "reason": "expired"}
+
+                return {"valid": True}
+
+            finally:
+                browser.close()
+
+    except Exception as exc:
+        return {"valid": False, "reason": "network_error", "detail": str(exc)}
 
 
 @router.post("/api/pinterest/upload_and_search", response_model=PinterestUploadSearchResponse)
@@ -411,7 +513,7 @@ async def pinterest_upload_and_search(
     title: str = Form("", description="Tiêu đề pin (tuỳ chọn)"),
     description: str = Form("", description="Mô tả pin (tuỳ chọn)"),
     link: str = Form("", description="Link đính kèm pin (tuỳ chọn)"),
-    cookie_string: str = Form(..., description="Cookie string của tài khoản Pinterest"),
+    cookie_string: str = Form("", description="Cookie string (để trống = dùng cookie đã lưu)"),
     headless: bool = Form(True, description="Chạy trình duyệt ẩn (True) hay hiện (False)"),
     scroll_rounds: int = Form(2, description="Số lần phân trang (mỗi lần ~25 pin)"),
 ):
@@ -419,6 +521,15 @@ async def pinterest_upload_and_search(
     Upload ảnh lên Pinterest, tạo pin, rồi lấy danh sách pin tương tự (visual search).
     Kết quả được lưu vào history.
     """
+    if not cookie_string.strip():
+        try:
+            saved = get_default_pinterest_cookie()
+            cookie_string = saved.get("cookie_string", "")
+        except Exception:
+            pass
+    if not cookie_string.strip():
+        raise HTTPException(status_code=400, detail="Chưa có cookie Pinterest. Vui lòng lưu cookie trước.")
+
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Vui lòng gửi file ảnh (image/*).")
 
