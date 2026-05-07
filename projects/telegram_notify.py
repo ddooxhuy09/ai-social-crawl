@@ -75,11 +75,12 @@ def notify_ai_image_done(project_name: str, task_title: str, done: int, total: i
     send_telegram(msg)
 
 
-def notify_crawl_all_done(project_name: str):
+def notify_crawl_all_done(project_name: str, keyword: str):
     """Báo cáo 1 lần khi crawl xong hết nhóm crawl_keyword / image"""
     msg = (
-        f"✅ <b>[Crawl Task] Đã hoàn tất gặt dũa!</b>\n"
+        f"✅ <b>[Crawl Task] Đã hoàn thành!</b>\n"
         f"📁 Project: <b>{html.escape(project_name)}</b>\n"
+        f"🔑 Keyword: <b>{html.escape(keyword)}</b>\n"
         f"👉 Trở lại app để kiểm tra kết quả ngay thôi."
     )
     send_telegram(msg)

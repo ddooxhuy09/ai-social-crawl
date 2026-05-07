@@ -156,7 +156,8 @@ async def run_task(task: dict):
                 ]
                 # Nếu không còn lệnh crawl nào thuộc project này pending, gửi 1 cú chót
                 if len(remaining) == 0:
-                    tg.notify_crawl_all_done(p_name)
+                    kw = task.get("keyword") or task.get("title") or "N/A"
+                    tg.notify_crawl_all_done(p_name, kw)
                     
             # BÁO CÁO CHO AI GENERATION TASK
             elif t_type == "chat-create-image":
