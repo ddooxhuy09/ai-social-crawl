@@ -82,15 +82,37 @@ async def run_task(task: dict):
     task_id = task.get("id")
     print(f"[WORKER] Running task: {task_id} - {task.get('title')}")
     
+    start_time_str = time.strftime("%Y-%m-%d %H:%M:%S")
+    task["startedAt"] = start_time_str
+    
     # 1. Update status to running
     queue_data = _load_queue()
     tasks = queue_data.get("tasks", [])
     for t in tasks:
         if t.get("id") == task_id:
             t["status"] = "running"
+            t["startedAt"] = start_time_str
             t["updatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%S")
             break
     _save_queue(queue_data)
+    
+    # --- SEND START NOTIFICATION ---
+    try:
+        t_type = task.get("type") or task.get("page")
+        if t_type in ("crawl_keyword", "crawl", "crawl-image", "crawl_image"):
+            import projects.db
+            import projects.telegram_notify as tg
+            p_name = "Crawl Page"
+            try:
+                project = projects.db._get_project(task.get("projectId"))
+                p_name = project.get("name", p_name)
+            except Exception: pass
+            
+            kw = task.get("keyword") or task.get("title") or "N/A"
+            tg.notify_crawl_start(p_name, kw, start_time_str)
+    except Exception as e:
+        print(f"[TELEGRAM] Lỗi gửi Start Noti: {e}")
+    # -------------------------------
     
     # 2. Execute based on type (CÓ GIỚI HẠN TIMEOUT CHỐNG KẸT DEADLOCK)
     try:
@@ -157,7 +179,9 @@ async def run_task(task: dict):
                 # Nếu không còn lệnh crawl nào thuộc project này pending, gửi 1 cú chót
                 if len(remaining) == 0:
                     kw = task.get("keyword") or task.get("title") or "N/A"
-                    tg.notify_crawl_all_done(p_name, kw)
+                    start_time_str = task.get("startedAt", time.strftime("%Y-%m-%d %H:%M:%S"))
+                    end_time_str = time.strftime("%Y-%m-%d %H:%M:%S")
+                    tg.notify_crawl_all_done(p_name, kw, start_time_str, end_time_str)
                     
             # BÁO CÁO CHO AI GENERATION TASK
             elif t_type == "chat-create-image":

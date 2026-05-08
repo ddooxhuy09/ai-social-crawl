@@ -79,13 +79,27 @@ def notify_ai_image_done(project_name: str, task_title: str, done: int, total: i
     send_telegram(msg)
 
 
-def notify_crawl_all_done(project_name: str, keyword: str):
+def notify_crawl_start(project_name: str, keyword: str, start_date: str):
+    """Báo cáo khi bắt đầu chạy task crawl"""
+    msg = (
+        f"🚀 <b>[Crawl Task] Đang bắt đầu chạy...</b>\n"
+        f"📁 Project: <b>{html.escape(project_name)}</b>\n"
+        f"🔑 Keyword: <b>{html.escape(keyword)}</b>\n"
+        f"🕒 Start: <b>{html.escape(start_date)}</b>\n"
+        f"👉 Hệ thống đang crawl, vui lòng đợi nhé."
+    )
+    send_telegram(msg)
+
+
+def notify_crawl_all_done(project_name: str, keyword: str, start_date: str, end_date: str):
     """Báo cáo 1 lần khi crawl xong hết nhóm crawl_keyword / image"""
     msg = (
         f"✅ <b>[Crawl Task] Đã hoàn thành!</b>\n"
         f"📁 Project: <b>{html.escape(project_name)}</b>\n"
         f"🔑 Keyword: <b>{html.escape(keyword)}</b>\n"
-        f"👉 Trở lại app để kiểm tra kết quả ngay thôi."
+        f"🕒 Start: <b>{html.escape(start_date)}</b>\n"
+        f"🏁 End: <b>{html.escape(end_date)}</b>\n"
+        f"👉 Trở lại app để kiểm tra kết quả."
     )
     send_telegram(msg)
 
