@@ -11,7 +11,7 @@ import html
 import threading
 import ssl
 
-def _send_telegram_sync(message: str):
+def _send_telegram_sync(message: str, image_url: str = None):
     """
     Hệ thống gọi ngầm hàm này ở một Thread khác để gửi API tới Telegram.
     Retry tối đa 3 lần nếu gặp lỗi network tạm thời.
@@ -21,18 +21,46 @@ def _send_telegram_sync(message: str):
     if not token or not chat_id:
         print("[TELEGRAM] Thiếu TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHAT_ID trong file .env")
         return
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = json.dumps({
-        "chat_id": chat_id,
-        "text": message,
-        "parse_mode": "HTML",
-    }).encode("utf-8")
+        
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    if not image_url:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = json.dumps({"chat_id": chat_id, "text": message, "parse_mode": "HTML"}).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+    elif image_url.startswith("http"):
+        url = f"https://api.telegram.org/bot{token}/sendPhoto"
+        payload = json.dumps({"chat_id": chat_id, "caption": message, "parse_mode": "HTML", "photo": image_url}).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+    elif image_url.startswith("data:image/"):
+        import base64, uuid
+        header, encoded = image_url.split(",", 1)
+        mime_type = header.split(";")[0].replace("data:", "")
+        ext = mime_type.split("/")[-1] if "/" in mime_type else "jpg"
+        file_data = base64.b64decode(encoded)
+        
+        url = f"https://api.telegram.org/bot{token}/sendPhoto"
+        boundary = uuid.uuid4().hex
+        headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+        
+        body = bytearray()
+        body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{chat_id}\r\n".encode("utf-8"))
+        body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name=\"caption\"\r\n\r\n{message}\r\n".encode("utf-8"))
+        body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name=\"parse_mode\"\r\n\r\nHTML\r\n".encode("utf-8"))
+        body.extend(f"--{boundary}\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"image.{ext}\"\r\nContent-Type: {mime_type}\r\n\r\n".encode("utf-8"))
+        body.extend(file_data)
+        body.extend(f"\r\n--{boundary}--\r\n".encode("utf-8"))
+        payload = body
+    else:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = json.dumps({"chat_id": chat_id, "text": message, "parse_mode": "HTML"}).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+
     for attempt in range(3):
         try:
-            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(url, data=payload, headers=headers)
             with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
                 pass  # Lặng lẽ gửi
             return  # Gửi thành công
@@ -44,24 +72,27 @@ def _send_telegram_sync(message: str):
                 print(f"[TELEGRAM] Gửi thất bại sau 3 lần thử: {e}")
 
 
-def send_telegram(message: str):
+def send_telegram(message: str, image_url: str = None):
     """
     Bắn tin nhắn thông qua một Thread riêng (Fire-and-forget), 
     tránh block event loop của FastAPI hoặc Worker.
     """
-    threading.Thread(target=_send_telegram_sync, args=(message,), daemon=True).start()
+    import datetime
+    now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    final_msg = f"{message}\n\n🕒 <i>Thời gian: {now_str}</i>"
+    threading.Thread(target=_send_telegram_sync, args=(final_msg, image_url), daemon=True).start()
 
 
 # ── Các hàm tiện ích ───────────────────────────────────────────
 
-def notify_step1_done(project_name: str, item_title: str):
+def notify_step1_done(project_name: str, image_url: str = None):
     """Gọi sau khi user hoàn thành việc chọn sản phẩm ở Step 1"""
     msg = (
         f"✅ <b>Step 1 hoàn thành!</b>\n"
         f"📁 Project: <b>{html.escape(project_name)}</b>\n"
-        f"🎯 Sản phẩm gốc: {html.escape(item_title)}"
+        f"🎯 Đã chọn được Original Product."
     )
-    send_telegram(msg)
+    send_telegram(msg, image_url=image_url)
 
 
 def notify_ai_image_done(project_name: str, task_title: str, done: int, total: int):
@@ -114,6 +145,17 @@ def notify_step3_done(project_name: str, filename: str):
         f"📁 Project: <b>{html.escape(project_name)}</b>\n"
         f"📄 Báo cáo hệ thống xuất thành file: <code>{html.escape(filename)}</code>\n"
         f"👉 Tới project để tải ngay file Word về máy thôi."
+    )
+    send_telegram(msg)
+
+
+def notify_listing_done(project_name: str, listing_name: str):
+    """Báo cáo khi hoàn thiện 100% quy trình Etsy Listing"""
+    msg = (
+        f"🏆 <b>[Etsy Listing] Hoàn tất 100%!</b>\n"
+        f"📁 Project: <b>{html.escape(project_name)}</b>\n"
+        f"🛍 Listing: <b>{html.escape(listing_name)}</b>\n"
+        f"👉 Đã có thể copy Draft để đăng bài."
     )
     send_telegram(msg)
 

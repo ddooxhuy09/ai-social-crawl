@@ -62,10 +62,20 @@ export default function OriginalPhase({ project, saveProject, onAddTaskToQueue, 
   const [crawlOpen, setCrawlOpen] = useState(false);
   const [manualUploadOpen, setManualUploadOpen] = useState(false);
 
-  const handleManualUploadConfirm = (items) => {
+  const handleManualUploadConfirm = async (items) => {
     if (!items || items.length === 0) return;
     const item = items[0];
-    saveProject({ ...project, original: { ...original, original_item: { ...item, source: "manual" }, status: "done" } });
+    const finalItem = { ...item, source: "manual" };
+    try {
+      await fetch(`${API_BASE}/api/projects/${project.id}/original/set-original`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item: finalItem }),
+      });
+      saveProject({ ...project, original: { ...original, original_item: finalItem, status: "done" } });
+    } catch (e) {
+      console.error("Lỗi khi upload original image:", e);
+    }
   };
 
   const loadCrawlHistory = useCallback(async () => {

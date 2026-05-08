@@ -1525,9 +1525,33 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                   </div>
                 </div>
                 {hasFinalDocument && (
-                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => copyText(finalDocumentText, "Final draft copied")}>
-                    Copy Full Draft
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => copyText(finalDocumentText, "Final draft copied")}>
+                      Copy Full Draft
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs bg-emerald-500 hover:bg-emerald-600 text-white border-0 shadow-sm"
+                      onClick={async () => {
+                        try {
+                          await fetch(`${API_BASE}/api/listing/finish`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ 
+                              listing_name: selectedListing, 
+                              listing_title: finalListingTitle,
+                              project_name: projectName 
+                            })
+                          });
+                          showToast("🎉 Đã thông báo Finish Listing thành công!");
+                        } catch (e) {
+                          showToast("Error: " + e.message, "error");
+                        }
+                      }}
+                    >
+                      Finish Listing
+                    </Button>
+                  </div>
                 )}
               </div>
 

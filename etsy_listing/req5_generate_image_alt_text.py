@@ -105,6 +105,14 @@ def _strip_forbidden_prefixes(slug: str) -> str:
     return re.sub(r"^(image|picture|photo)(-of)?-", "", slug)
 
 
+def _normalize_file_name(raw: str, fallback_keyword: str) -> str:
+    slug = _slugify(raw or "")
+    # Strip leading 'kniri-' to avoid duplication before re-adding
+    slug = re.sub(r"^kniri-+", "", slug)
+    slug = slug.strip("-") or _slugify(fallback_keyword)
+    return f"Kniri-{slug}"
+
+
 def _finalize_alt_text(raw_alt_text: str, keyword_used: str) -> str:
     keyword_slug = _slugify(keyword_used)
     raw_slug = _strip_forbidden_prefixes(_slugify(raw_alt_text))
@@ -334,7 +342,7 @@ async def generate_image_alt_texts(
 
         keyword_used = _match_keyword(str(ai_payload.get("keyword_used") or ""), keyword_pool, used_keywords)
         alt_text = str(ai_payload.get("alt_text") or keyword_used).strip()
-        file_name = str(ai_payload.get("file_name") or f"Kniri-{_slugify(keyword_used)}").strip()
+        file_name = _normalize_file_name(str(ai_payload.get("file_name") or ""), keyword_used)
 
         used_keywords.append(keyword_used)
         generated_images.append(

@@ -103,9 +103,10 @@ def set_original_item(project_id: str, body: dict):
     
     try:
         from projects.telegram_notify import notify_step1_done
+        image_url = item.get("image_url") or item.get("thumbnail") or item.get("image")
         notify_step1_done(
             project.get("name", "Unknown Project"), 
-            item.get("title") or item.get("name") or "Original Item"
+            image_url
         )
     except Exception as e:
         print(f"[TELEGRAM] Lỗi báo cáo Step 1: {e}")

@@ -42,6 +42,9 @@ async def save_manual_title(req: TitleManualRequest):
     manual_title = req.title.strip()
     if not manual_title:
         raise HTTPException(status_code=400, detail="Vui lòng nhập title hợp lệ.")
+    suffix = "| Kniri crochet"
+    if not manual_title.endswith(suffix):
+        manual_title = f"{manual_title} {suffix}"
 
     # Get existing titles if any
     existing_req2 = history.get("req2") or {}
@@ -97,6 +100,11 @@ async def generate_listing_titles(req: GenerateTitlesRequest):
         titles_json = json.loads(text)
         if not isinstance(titles_json, list):
             raise ValueError("API did not return a valid list of titles.")
+        suffix = "| Kniri crochet"
+        titles_json = [
+            t if t.endswith(suffix) else f"{t} {suffix}"
+            for t in titles_json
+        ]
     except Exception as e:
         import traceback
         traceback.print_exc()
