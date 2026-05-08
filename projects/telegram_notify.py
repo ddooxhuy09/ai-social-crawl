@@ -91,7 +91,7 @@ def notify_crawl_start(project_name: str, keyword: str, start_date: str):
     send_telegram(msg)
 
 
-def notify_crawl_all_done(project_name: str, keyword: str, start_date: str, end_date: str):
+def notify_crawl_all_done(project_name: str, keyword: str, start_date: str, end_date: str, total_likes: int = 0):
     """Báo cáo 1 lần khi crawl xong hết nhóm crawl_keyword / image"""
     msg = (
         f"✅ <b>[Crawl Task] Đã hoàn thành!</b>\n"
@@ -99,8 +99,11 @@ def notify_crawl_all_done(project_name: str, keyword: str, start_date: str, end_
         f"🔑 Keyword: <b>{html.escape(keyword)}</b>\n"
         f"🕒 Start: <b>{html.escape(start_date)}</b>\n"
         f"🏁 End: <b>{html.escape(end_date)}</b>\n"
-        f"👉 Trở lại app để kiểm tra kết quả."
     )
+    if total_likes > 0:
+        msg += f"❤️ Tổng Tương tác Pinterest (Save/Repin): <b>{total_likes:,}</b>\n"
+    
+    msg += f"👉 Trở lại app để kiểm tra kết quả."
     send_telegram(msg)
 
 

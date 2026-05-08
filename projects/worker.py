@@ -181,7 +181,8 @@ async def run_task(task: dict):
                     kw = task.get("keyword") or task.get("title") or "N/A"
                     start_time_str = task.get("startedAt", time.strftime("%Y-%m-%d %H:%M:%S"))
                     end_time_str = time.strftime("%Y-%m-%d %H:%M:%S")
-                    tg.notify_crawl_all_done(p_name, kw, start_time_str, end_time_str)
+                    pinterest_likes = task.get("result", {}).get("pinterest_likes", 0) if task.get("result") else 0
+                    tg.notify_crawl_all_done(p_name, kw, start_time_str, end_time_str, pinterest_likes)
                     
             # BÁO CÁO CHO AI GENERATION TASK
             elif t_type == "chat-create-image":
@@ -292,6 +293,11 @@ async def execute_crawl_keyword(task: dict):
 
     pin_infos.sort(key=lambda p: int(p.get("view_count") or 0), reverse=True)
     
+    pinterest_likes = sum(
+        int(p.get("reaction_count") or 0) + int(p.get("repin_count") or 0) + int(p.get("save_count") or 0)
+        for p in pins_by_source.get("pinterest", [])
+    )
+    
     # Lưu history như cũ (hàm save_history sẽ lo việc tạo folder info.json)
     pid_for_history = project_id if project_id and project_id != "global" else None
     history_id = await asyncio.to_thread(save_history, kw, pins_by_source, "crawl", pid_for_history)
@@ -300,7 +306,8 @@ async def execute_crawl_keyword(task: dict):
         "keyword": kw,
         "total": len(pin_infos),
         "pins": pin_infos, # Trả về bản rút gọn để UI hiển thị
-        "history_id": history_id
+        "history_id": history_id,
+        "pinterest_likes": pinterest_likes
     }
 
 async def execute_crawl_image(task: dict):
@@ -350,6 +357,11 @@ async def execute_crawl_image(task: dict):
         pin_infos_display = [normalize_to_display(p, "pinterest") for p in similar_pins_raw]
         pin_infos_display.sort(key=lambda p: int(p.get("view_count") or 0), reverse=True)
         
+        pinterest_likes = sum(
+            int(p.get("reaction_count") or 0) + int(p.get("repin_count") or 0) + int(p.get("save_count") or 0)
+            for p in similar_pins_raw
+        )
+        
         # Save history
         pins_by_source = {"pinterest": similar_pins_raw}
         keyword = task.get("title") or f"image_upload_{result.get('pin_id')}"
@@ -359,7 +371,8 @@ async def execute_crawl_image(task: dict):
             "total": len(pin_infos_display),
             "pins": pin_infos_display,
             "history_id": history_id,
-            "pin_url": result.get("pin_url")
+            "pin_url": result.get("pin_url"),
+            "pinterest_likes": pinterest_likes
         }
     finally:
         if os.path.exists(tmp_path):
