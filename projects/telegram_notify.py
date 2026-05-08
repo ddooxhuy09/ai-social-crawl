@@ -9,6 +9,7 @@ import urllib.parse
 import json
 import html
 import threading
+import ssl
 
 def _send_telegram_sync(message: str):
     """
@@ -29,7 +30,10 @@ def _send_telegram_sync(message: str):
     for attempt in range(3):
         try:
             req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
                 pass  # Lặng lẽ gửi
             return  # Gửi thành công
         except Exception as e:
