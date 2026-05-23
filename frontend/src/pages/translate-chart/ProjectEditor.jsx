@@ -81,6 +81,7 @@ export default function ProjectEditor({ project, onProjectUpdated }) {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrMsg, setOcrMsg]         = useState("");
   const [selectedLangs, setSelectedLangs] = useState([]);
+  const [bilingual, setBilingual]   = useState(false);
   const [translating, setTranslating] = useState(false);
   const [transMsg, setTransMsg]     = useState(null);
   const [results, setResults]       = useState({});
@@ -200,7 +201,7 @@ export default function ProjectEditor({ project, onProjectUpdated }) {
       const res  = await fetch(`${API_BASE}/api/translate-chart/projects/${project.id}/translate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ langs: selectedLangs }),
+        body: JSON.stringify({ langs: selectedLangs, bilingual }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -407,6 +408,26 @@ export default function ProjectEditor({ project, onProjectUpdated }) {
                 );
               })}
             </div>
+
+            {/* Bilingual toggle */}
+            <button
+              type="button"
+              onClick={() => setBilingual((v) => !v)}
+              className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 text-sm transition-all text-left
+                ${bilingual ? "border-violet-400 bg-violet-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
+            >
+              <div className={`w-9 h-5 rounded-full flex items-center transition-colors shrink-0 ${bilingual ? "bg-violet-500" : "bg-gray-200"}`}>
+                <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform mx-0.5 ${bilingual ? "translate-x-4" : "translate-x-0"}`} />
+              </div>
+              <div>
+                <div className={`font-semibold leading-tight ${bilingual ? "text-violet-700" : "text-gray-600"}`}>
+                  Bilingual output
+                </div>
+                <div className="text-[11px] text-gray-400 mt-0.5">
+                  Each original line followed by its translation in italics
+                </div>
+              </div>
+            </button>
 
             {!hasInput && (
               <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-4 py-3 rounded-xl">

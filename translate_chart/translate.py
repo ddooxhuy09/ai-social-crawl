@@ -154,6 +154,7 @@ def _build_prompt(
     lang: str,
     all_terms: list[dict],
     raw_abbr_map: dict[str, str],
+    bilingual: bool = False,
 ) -> str:
     lang_name = SUPPORTED_LANGS[lang]
 
@@ -164,6 +165,23 @@ def _build_prompt(
     )
 
     abbr_codes = ", ".join(raw_abbr_map.keys()) if raw_abbr_map else "none"
+
+    bilingual_rules = (
+        "\n## BILINGUAL FORMAT\n"
+        "Produce a bilingual document where every line of content appears TWICE:\n"
+        "  1. The original English line, exactly as-is.\n"
+        "  2. Immediately below it, the translation wrapped in italics (*...*).\n"
+        "Apply this to ALL content: headings, list items, table cells, plain paragraphs.\n"
+        "Keep the same Markdown prefix on the translated line (# for headings, - for list items, etc.).\n"
+        "Do NOT add extra blank lines. Keep all blank lines exactly as in the original.\n\n"
+        "Example:\n"
+        "# Pattern Name\n"
+        "# *Nom du Patron*\n\n"
+        "- ch: chain stitch\n"
+        "- *ch: maille en l'air*\n\n"
+        "Row 1: ch 10, sc in 2nd ch from hook.\n"
+        "*Rang 1 : ml 10, ms dans la 2e ml depuis le crochet.*\n"
+    ) if bilingual else ""
 
     return (
         f"You are a professional translator specializing in crochet patterns.\n"
@@ -178,7 +196,8 @@ def _build_prompt(
         f"({abbr_codes}) must remain EXACTLY as written. Translate only the description on the right.\n"
         f"4. Translate naturally — the output should read as a native {lang_name} crochet pattern.\n"
         f"5. Before returning, silently check every term in MANDATORY TERMINOLOGY and fix any violations.\n"
-        f"6. Return ONLY the translated document. No commentary, no preamble, no code fences.\n\n"
+        f"6. Return ONLY the translated document. No commentary, no preamble, no code fences.\n"
+        f"{bilingual_rules}\n"
         f"## DOCUMENT TO TRANSLATE\n"
         f"{source}"
     )
@@ -256,9 +275,10 @@ def _validate(translated: str, all_terms: list[dict], lang: str) -> list[dict]:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def translate_one(text: str, lang: str, terminology: dict) -> str:
+def translate_one(text: str, lang: str, terminology: dict, bilingual: bool = False) -> str:
     """
     Translate *text* into *lang* using the terminology table for enforcement.
+    If bilingual=True, each original line is followed by its italic translation.
     Raises on Gemini errors. Returns the translated Markdown string.
     """
     term_table = _terminology_to_term_table(terminology)
@@ -269,12 +289,12 @@ def translate_one(text: str, lang: str, terminology: dict) -> str:
     all_terms   = abbr_terms + body_terms
 
     log.info(
-        "[translate:%s] %d terms from ABBREVIATIONS, %d from body (%d total)",
-        lang, len(abbr_terms), len(body_terms), len(all_terms),
+        "[translate:%s] %d terms from ABBREVIATIONS, %d from body (%d total) bilingual=%s",
+        lang, len(abbr_terms), len(body_terms), len(all_terms), bilingual,
     )
 
     # First translation pass
-    prompt = _build_prompt(text, lang, all_terms, raw_abbr_map)
+    prompt = _build_prompt(text, lang, all_terms, raw_abbr_map, bilingual=bilingual)
     translated = _call_gemini(prompt)
 
     # Validate

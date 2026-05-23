@@ -132,6 +132,7 @@ async def start_ocr(project_id: str, background_tasks: BackgroundTasks, file: Up
 
 class TranslateRequest(BaseModel):
     langs: list[str]
+    bilingual: bool = False
 
 
 @router.post("/projects/{project_id}/translate")
@@ -155,7 +156,7 @@ async def translate_project(project_id: str, req: TranslateRequest):
 
     for lang in req.langs:
         try:
-            result = translate_one(source, lang, terminology)
+            result = translate_one(source, lang, terminology, bilingual=req.bilingual)
             (project_dir(project_id) / f"result_{lang}.md").write_text(result, encoding="utf-8")
             translated.append(lang)
         except Exception as e:
