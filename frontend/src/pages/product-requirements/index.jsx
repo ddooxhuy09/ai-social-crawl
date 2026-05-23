@@ -230,11 +230,11 @@ export default function RequirementsPage() {
   const canGenerate = !!attributeTable.trim() && !!productName.trim();
 
   return (
-    <div className="flex h-full overflow-hidden bg-gray-50">
+    <div className="flex flex-col md:flex-row h-full overflow-hidden bg-gray-50">
       <ToastContainer toasts={toasts} />
 
       {/* ── Left sidebar ── */}
-      <aside className="w-[272px] flex-none border-r border-gray-200 bg-white flex flex-col overflow-hidden">
+      <aside className="w-full md:w-[272px] flex-none border-r border-gray-200 bg-white flex flex-col overflow-hidden md:max-w-[272px] max-h-[200px] md:max-h-none border-b md:border-b-0">
         <div className="px-5 py-4 border-b border-gray-100 shrink-0">
           <p className="text-sm font-semibold text-gray-900">Product Requirements</p>
           <p className="text-[11px] text-gray-400 mt-0.5">Create or select a document</p>
@@ -310,7 +310,7 @@ export default function RequirementsPage() {
             </div>
           </div>
         ) : (
-          <div className="max-w-2xl mx-auto px-6 py-6 flex flex-col gap-5">
+          <div className="max-w-2xl mx-auto px-4 md:px-6 py-6 flex flex-col gap-5">
 
             {/* Page title + save */}
             <div className="flex items-start justify-between gap-4">

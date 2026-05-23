@@ -450,9 +450,9 @@ export default function ProductInsightsPage() {
   const isDone = selectedData?.status === "done";
 
   return (
-    <div className="flex h-full overflow-hidden bg-gray-50">
+    <div className="flex flex-col md:flex-row h-full overflow-hidden bg-gray-50">
       {/* ── Left Sidebar ── */}
-      <aside className="w-[280px] flex-none border-r border-gray-200 bg-white flex flex-col overflow-hidden">
+      <aside className="w-full md:w-[280px] flex-none border-r border-gray-200 bg-white flex flex-col overflow-hidden md:max-w-[280px] max-h-[200px] md:max-h-none">
         <div className="px-5 py-4 border-b border-gray-100 shrink-0">
           <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
             <Globe size={15} className="text-violet-500" /> Product Insights

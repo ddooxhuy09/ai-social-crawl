@@ -368,13 +368,13 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
   const canGetAttributes = allImages.length >= 1 && !isGettingAttributes;
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-col md:flex-row h-full overflow-hidden">
 
       {/* ── Main panel ───────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto flex flex-col min-w-0">
 
         {/* ─── Step 1: Crawl Keyword ─────────────────────────────────────────── */}
-        <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+        <div className="px-4 md:px-6 pt-6 pb-4 border-b border-gray-100">
           <StepBadge n="1" label="Crawl Keyword" active={true} />
           <div className="mt-3 flex gap-2">
             <div className="relative flex-1">
@@ -532,7 +532,7 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
         </div>
 
         {/* ─── Chat log ─────────────────────────────────────────────────────── */}
-        <div className="flex-1 px-6 py-5 flex flex-col gap-5">
+        <div className="flex-1 px-4 md:px-6 py-5 flex flex-col gap-5">
           {chatLoading ? (
             <div className="flex items-center justify-center py-16 gap-2 text-violet-400">
               <Loader2 size={18} className="animate-spin" />
@@ -590,7 +590,7 @@ export default function RedesignPhase({ project, onAddTaskToQueue }) {
       </div>
 
       {/* ── Side Drawer ──────────────────────────────────────────────────────── */}
-      <div className={`shrink-0 border-l border-gray-200 bg-gray-50 flex flex-col overflow-hidden transition-all duration-300 ${drawerOpen ? "w-[340px]" : "w-0"}`}>
+      <div className={`shrink-0 border-l border-gray-200 bg-gray-50 flex flex-col overflow-hidden transition-all duration-300 ${drawerOpen ? "w-full md:w-[340px] max-h-[300px] md:max-h-none border-t md:border-t-0" : "w-0 max-h-0 md:max-h-none"}`}>
         {drawerOpen && (
           <>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 shrink-0 bg-white">

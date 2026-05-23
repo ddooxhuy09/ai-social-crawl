@@ -64,7 +64,7 @@ async def generate_word(project_id: str):
         _update_project(project_id, project)
         
         try:
-            from projects.telegram_notify import notify_step3_done
+            from telegram_bot.notify import notify_step3_done
             notify_step3_done(project.get("name", "Unknown Project"), filename)
         except Exception as e:
             print(f"[TELEGRAM] Lỗi báo cáo Step 3: {e}")

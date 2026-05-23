@@ -59,7 +59,7 @@ async def generate_image_endpoint(body: GenerateImageRequest):
         )
         save_prompt(body.prompt.strip(), model=body.model)
         try:
-            from projects.telegram_notify import send_telegram
+            from telegram_bot.notify import send_telegram
             import html as _html
             _prompt_preview = _html.escape(body.prompt.strip()[:200])
             send_telegram(
@@ -164,7 +164,7 @@ async def build_image_prompt_endpoint(body: dict):
     try:
         prompts = await build_image_prompt(rows, image_names=image_names)
         try:
-            from projects.telegram_notify import send_telegram
+            from telegram_bot.notify import send_telegram
             import html as _html
             _preview = _html.escape((prompts[0] if prompts else "")[:200])
             send_telegram(

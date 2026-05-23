@@ -235,16 +235,16 @@ export default function ChatCreateImagePage() {
 
 
   return (
-    <div className="flex h-full bg-white">
+    <div className="flex flex-col md:flex-row h-full bg-white">
       {/* Sidebar */}
-      <div className={`shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 transition-all duration-300 overflow-hidden ${showPrompts ? "w-[240px]" : "w-0 border-r-0"}`}>
-        <div className="px-3 pt-3 pb-2 shrink-0 min-w-[240px]">
+      <div className={`shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 transition-all duration-300 overflow-hidden md:border-r md:border-gray-200 border-b md:border-b-0 ${showPrompts ? "w-full md:w-[240px] max-h-[160px] md:max-h-none" : "w-0 md:w-0 md:border-r-0 max-h-0 md:max-h-none border-r-0 border-b-0"}`}>
+        <div className="px-3 pt-3 pb-2 shrink-0 min-w-0 md:min-w-[240px]">
           <Button variant="outline" type="button" onClick={newSession}
             className="w-full justify-center gap-2 border-dashed border-gray-300 text-gray-500 hover:border-violet-400 hover:text-violet-600 hover:bg-violet-50">
             + New Chat
           </Button>
         </div>
-        <div className="flex-1 overflow-auto px-2 pb-2 flex flex-col gap-1 min-w-[240px]">
+        <div className="flex-1 overflow-x-auto md:overflow-auto px-2 pb-2 flex flex-row md:flex-col gap-1 min-w-0 md:min-w-[240px]">
           {chatSessions.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-4">
               <Clock size={28} className="text-gray-300 mb-2" />
@@ -252,7 +252,7 @@ export default function ChatCreateImagePage() {
             </div>
           ) : chatSessions.map((s, idx) => (
             <div key={s.id}
-              className={`group flex items-start gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors border ${s.id === sessionId ? "bg-white border-violet-200 text-violet-700 shadow-sm" : "border-transparent hover:bg-white hover:border-gray-200 text-gray-700"}`}
+              className={`group flex items-start gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors border shrink-0 md:shrink w-48 md:w-auto ${s.id === sessionId ? "bg-white border-violet-200 text-violet-700 shadow-sm" : "border-transparent hover:bg-white hover:border-gray-200 text-gray-700"}`}
               onClick={() => loadSession(s.id)}>
               <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                 <p className="text-sm font-medium truncate leading-tight">{s.title || `Chat ${chatSessions.length - idx}`}</p>
@@ -289,7 +289,7 @@ export default function ChatCreateImagePage() {
         ) : (
           <>
             {/* Header */}
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200 shrink-0 bg-white z-10 shadow-sm relative">
+            <div className="flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 md:py-4 border-b border-gray-200 shrink-0 bg-white z-10 shadow-sm relative overflow-x-auto">
               <Button variant="ghost" type="button" onClick={() => setShowPrompts(p => !p)}
                 className="px-1.5 -ml-2 text-gray-400 hover:text-gray-700 rounded-lg">
                 {showPrompts ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
@@ -314,7 +314,7 @@ export default function ChatCreateImagePage() {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-auto px-6 py-6 flex flex-col gap-6 bg-gray-50/50">
+            <div className="flex-1 overflow-auto px-4 md:px-6 py-6 flex flex-col gap-6 bg-gray-50/50">
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full gap-4 text-center select-none text-gray-400">
                   <div className="flex gap-4">
@@ -377,7 +377,7 @@ export default function ChatCreateImagePage() {
             </div>
 
             {/* Input area */}
-            <div className="px-6 py-4 bg-white border-t border-gray-200 shrink-0 relative z-10 shadow-[0_-10px_30px_rgba(0,0,0,0.02)]">
+            <div className="px-4 md:px-6 py-4 bg-white border-t border-gray-200 shrink-0 relative z-10 shadow-[0_-10px_30px_rgba(0,0,0,0.02)]">
               {/* Attachments preview */}
               {(mainImage || crawlImages.length > 0) && (
                 <div className="flex flex-wrap gap-3 pb-3 mb-2 border-b border-gray-100">

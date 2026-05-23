@@ -85,7 +85,7 @@ export default function ProjectsPage({
   };
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-col md:flex-row h-full overflow-hidden">
       <ProjectSidebar
         projects={projects}
         selectedId={selectedId}
@@ -99,7 +99,7 @@ export default function ProjectsPage({
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Progress Stepper Pipeline */}
         {selected && (
-          <div className="flex items-center px-8 py-5 border-b border-gray-100 bg-white shrink-0 shadow-sm relative z-10">
+          <div className="flex items-center px-4 md:px-8 py-4 md:py-5 border-b border-gray-100 bg-white shrink-0 shadow-sm relative z-10 overflow-x-auto">
             {PHASES.filter(ph => (selected.phases || ["original", "redesign", "final"]).includes(ph.key)).map((ph, i, arr) => {
               const status = phaseStatus(ph.key);
               const isActive = activePhase === ph.key;
@@ -228,7 +228,7 @@ export default function ProjectsPage({
       {createModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center"
           onClick={e => { if (e.target === e.currentTarget) setCreateModal(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[420px] p-6 flex flex-col gap-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-[420px] max-w-[90vw] p-6 flex flex-col gap-4">
             <h2 className="text-lg font-bold text-gray-900">Tạo project mới</h2>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-gray-700">Tên project</label>

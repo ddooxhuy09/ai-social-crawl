@@ -102,7 +102,7 @@ def set_original_item(project_id: str, body: dict):
     _update_project(project_id, project)
     
     try:
-        from projects.telegram_notify import notify_step1_done
+        from telegram_bot.notify import notify_step1_done
         image_url = item.get("image_url") or item.get("thumbnail") or item.get("image")
         notify_step1_done(
             project.get("name", "Unknown Project"), 

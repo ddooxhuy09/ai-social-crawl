@@ -85,15 +85,20 @@ def get_listing_history_path(listing_name: str) -> Path:
     return LISTING_HISTORY_DIR / f"{slug}.json"
 
 
-def build_empty_listing_history(listing_name: str, source_filename: str = "", seed_keyword: str = "") -> dict:
+def build_empty_listing_history(listing_name: str, source_filename: str = "", seed_keyword: str = "", project_name: str = "") -> dict:
     listing_name = ensure_listing_name(listing_name)
     timestamp = now_iso()
     return {
         "listing_name": listing_name,
         "source_filename": source_filename,
         "seed_keyword": seed_keyword,
+        "project_name": project_name,
         "created_at": timestamp,
         "updated_at": timestamp,
+        "price": "",
+        "quantity": 500,
+        "when_made": "2020_2026",
+        "digital_file": None,
         "req1": None,
         "req2": None,
         "req3": None,
@@ -107,6 +112,7 @@ def _normalize_listing_history(
     listing_name: str = "",
     source_filename: str = "",
     seed_keyword: str = "",
+    project_name: str = "",
 ) -> dict:
     resolved_name = listing_name or history.get("listing_name", "")
     if not resolved_name:
@@ -115,11 +121,17 @@ def _normalize_listing_history(
         resolved_name,
         source_filename or history.get("source_filename", ""),
         seed_keyword or history.get("seed_keyword", ""),
+        project_name or history.get("project_name", ""),
     )
     base.update(history or {})
     base["listing_name"] = ensure_listing_name(base.get("listing_name") or resolved_name)
     base["source_filename"] = base.get("source_filename", "")
     base["seed_keyword"] = base.get("seed_keyword", "")
+    base["project_name"] = base.get("project_name", "")
+    base["price"] = base.get("price", "")
+    base["quantity"] = base.get("quantity", 500)
+    base["when_made"] = base.get("when_made", "2020_2026")
+    base["digital_file"] = base.get("digital_file") or None
     base["created_at"] = base.get("created_at") or now_iso()
     base["updated_at"] = base.get("updated_at") or base["created_at"]
     for key in ("req1", "req2", "req3", "req4", "req5"):
@@ -184,6 +196,7 @@ def build_listing_history_response(history: dict) -> dict:
         history.get("listing_name", ""),
         history.get("source_filename", ""),
         history.get("seed_keyword", ""),
+        history.get("project_name", ""),
     )
     response = {
         "exists": True,
@@ -203,16 +216,35 @@ def list_all_listing_histories() -> list[dict]:
     def _extract(data, path):
         if not isinstance(data, dict):
             return None
+        req4 = data.get("req4") or {}
+        req5 = data.get("req5") or {}
+        req3 = data.get("req3") or {}
+        req2 = data.get("req2") or {}
+        listing_title = (
+            req4.get("listing_title")
+            or req3.get("listing_title")
+            or (req2.get("titles") or [None])[0]
+            or ""
+        )
         return {
             "listing_name":   data.get("listing_name", path.stem),
             "source_filename": data.get("source_filename", ""),
             "seed_keyword":   data.get("seed_keyword", ""),
+            "project_name":   data.get("project_name", ""),
             "updated_at":     data.get("updated_at", ""),
             "has_req1": bool(data.get("req1")),
             "has_req2": bool(data.get("req2")),
             "has_req3": bool(data.get("req3")),
             "has_req4": bool(data.get("req4")),
             "has_req5": bool(data.get("req5")),
+            "price":          data.get("price", ""),
+            "quantity":       data.get("quantity", 500),
+            "when_made":      data.get("when_made", "2020_2026"),
+            "digital_file":   data.get("digital_file"),
+            "listing_title":  listing_title,
+            "description_preview": (req4.get("description_text") or "")[:120],
+            "image_count":    len(req5.get("images") or []),
+            "tag_count":      len(req3.get("tags") or []),
         }
     return list_json_dir(LISTING_HISTORY_DIR, _extract)
 

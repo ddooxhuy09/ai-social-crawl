@@ -129,9 +129,9 @@ export default function PinterestImagePage({ history, loadHistory, initialHistor
         <LoadingOverlay title="Đang xử lý..." subtitle="Upload ảnh và tìm pin tương tự, khoảng 30–60 giây." />
       )}
 
-      <div className="flex gap-4 h-full overflow-hidden p-4">
+      <div className="flex flex-col md:flex-row gap-4 h-full overflow-hidden p-4">
         {/* Left panel: form + history */}
-        <div className="w-64 shrink-0 flex flex-col gap-3 overflow-hidden">
+        <div className="w-full md:w-64 shrink-0 flex flex-col gap-3 overflow-hidden">
           <p className="font-semibold text-sm text-gray-900">Tìm pin tương tự</p>
 
           {/* Image dropzone */}
@@ -217,7 +217,7 @@ export default function PinterestImagePage({ history, loadHistory, initialHistor
                   </div>
 
                   {/* Pin grid */}
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2.5 pb-4">
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2.5 pb-4">
                     {displayPins.map((pin, i) => (
                       <PinCard key={pin.pin_url || i} pin={pin} />
                     ))}

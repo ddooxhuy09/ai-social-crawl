@@ -1,0 +1,508 @@
+{
+  "ch": {
+    "en_us": {
+      "full": "chain",
+      "abbr": [
+        "ch"
+      ]
+    },
+    "en_uk": {
+      "full": "chain",
+      "abbr": [
+        "ch"
+      ]
+    },
+    "fr": {
+      "full": "maille en l'air",
+      "abbr": [
+        "ml"
+      ]
+    },
+    "de": {
+      "full": "Luftmasche",
+      "abbr": [
+        "Lm"
+      ]
+    },
+    "es": {
+      "full": "cadeneta, cadena",
+      "abbr": [
+        "cad"
+      ]
+    }
+  },
+  "slst": {
+    "en_us": {
+      "full": "slip stitch",
+      "abbr": [
+        "slst",
+        "sl st"
+      ]
+    },
+    "en_uk": {
+      "full": "slip stitch",
+      "abbr": [
+        "slst",
+        "sl st"
+      ]
+    },
+    "fr": {
+      "full": "maille coulée",
+      "abbr": [
+        "mc"
+      ]
+    },
+    "de": {
+      "full": "Kettmasche",
+      "abbr": [
+        "Kettm"
+      ]
+    },
+    "es": {
+      "full": "punto enano",
+      "abbr": [
+        "pe"
+      ]
+    }
+  },
+  "sc": {
+    "en_us": {
+      "full": "single crochet",
+      "abbr": [
+        "sc"
+      ]
+    },
+    "en_uk": {
+      "full": "double crochet",
+      "abbr": [
+        "dc"
+      ]
+    },
+    "fr": {
+      "full": "maille serrée",
+      "abbr": [
+        "ms"
+      ]
+    },
+    "de": {
+      "full": "Feste Masche",
+      "abbr": [
+        "fM"
+      ]
+    },
+    "es": {
+      "full": "punto bajo",
+      "abbr": [
+        "pb"
+      ]
+    }
+  },
+  "hdc": {
+    "en_us": {
+      "full": "half double crochet",
+      "abbr": [
+        "hdc"
+      ]
+    },
+    "en_uk": {
+      "full": "half treble crochet",
+      "abbr": [
+        "htr"
+      ]
+    },
+    "fr": {
+      "full": "demi-bride",
+      "abbr": [
+        "db"
+      ]
+    },
+    "de": {
+      "full": "Halbes Stäbchen",
+      "abbr": [
+        "hStb"
+      ]
+    },
+    "es": {
+      "full": "medio punto alto",
+      "abbr": [
+        "mpa"
+      ]
+    }
+  },
+  "dc": {
+    "en_us": {
+      "full": "double crochet",
+      "abbr": [
+        "dc"
+      ]
+    },
+    "en_uk": {
+      "full": "treble crochet",
+      "abbr": [
+        "tr"
+      ]
+    },
+    "fr": {
+      "full": "bride",
+      "abbr": [
+        "br"
+      ]
+    },
+    "de": {
+      "full": "Stäbchen",
+      "abbr": [
+        "Sbt"
+      ]
+    },
+    "es": {
+      "full": "punto alto",
+      "abbr": [
+        "pa"
+      ]
+    }
+  },
+  "tr": {
+    "en_us": {
+      "full": "triple crochet",
+      "abbr": [
+        "tr"
+      ]
+    },
+    "en_uk": {
+      "full": "double treble crochet",
+      "abbr": [
+        "dtr"
+      ]
+    },
+    "fr": {
+      "full": "double bride",
+      "abbr": [
+        "dbr"
+      ]
+    },
+    "de": {
+      "full": "Doppelstäbchen",
+      "abbr": [
+        "dStb"
+      ]
+    },
+    "es": {
+      "full": "punto alto doble",
+      "abbr": [
+        "pad"
+      ]
+    }
+  },
+  "dtr": {
+    "en_us": {
+      "full": "double triple crochet",
+      "abbr": [
+        "dtr"
+      ]
+    },
+    "en_uk": {
+      "full": "triple treble",
+      "abbr": [
+        "trtr",
+        "trip tr"
+      ]
+    },
+    "fr": {
+      "full": "triple bride",
+      "abbr": [
+        "tbr"
+      ]
+    },
+    "de": {
+      "full": "Dreifachstäbchen",
+      "abbr": [
+        "Dreifach-Stb"
+      ]
+    },
+    "es": {
+      "full": "punto triple",
+      "abbr": []
+    }
+  },
+  "dec": {
+    "en_us": {
+      "full": "decrease",
+      "abbr": [
+        "dec"
+      ]
+    },
+    "en_uk": {
+      "full": "decrease",
+      "abbr": [
+        "dec"
+      ]
+    },
+    "fr": {
+      "full": "diminution",
+      "abbr": [
+        "dim"
+      ]
+    },
+    "de": {
+      "full": "abnehmen",
+      "abbr": [
+        "Abn"
+      ]
+    },
+    "es": {
+      "full": "disminución",
+      "abbr": [
+        "dis"
+      ]
+    }
+  },
+  "inc": {
+    "en_us": {
+      "full": "increase",
+      "abbr": [
+        "inc"
+      ]
+    },
+    "en_uk": {
+      "full": "increase",
+      "abbr": [
+        "inc"
+      ]
+    },
+    "fr": {
+      "full": "augmentation",
+      "abbr": [
+        "aug"
+      ]
+    },
+    "de": {
+      "full": "zunehmen",
+      "abbr": [
+        "Zun"
+      ]
+    },
+    "es": {
+      "full": "aumento",
+      "abbr": [
+        "aum"
+      ]
+    }
+  },
+  "skip": {
+    "en_us": {
+      "full": "skip",
+      "abbr": [
+        "sk"
+      ]
+    },
+    "en_uk": {
+      "full": "miss",
+      "abbr": []
+    },
+    "fr": {
+      "full": "passer",
+      "abbr": []
+    },
+    "de": {
+      "full": "übergehen",
+      "abbr": []
+    },
+    "es": {
+      "full": "rematar",
+      "abbr": []
+    }
+  },
+  "rnd": {
+    "en_us": {
+      "full": "round",
+      "abbr": [
+        "rnd"
+      ]
+    },
+    "en_uk": {
+      "full": "round",
+      "abbr": [
+        "rnd"
+      ]
+    },
+    "fr": {
+      "full": "tour",
+      "abbr": [
+        "t"
+      ]
+    },
+    "de": {
+      "full": "Runde",
+      "abbr": [
+        "Rd"
+      ]
+    },
+    "es": {
+      "full": "vuelta",
+      "abbr": [
+        "vta"
+      ]
+    }
+  },
+  "row": {
+    "en_us": {
+      "full": "row",
+      "abbr": [
+        "row"
+      ]
+    },
+    "en_uk": {
+      "full": "row",
+      "abbr": [
+        "row"
+      ]
+    },
+    "fr": {
+      "full": "rang",
+      "abbr": [
+        "rg"
+      ]
+    },
+    "de": {
+      "full": "Reihe",
+      "abbr": [
+        "R"
+      ]
+    },
+    "es": {
+      "full": "fila",
+      "abbr": [
+        "f"
+      ]
+    }
+  },
+  "turn": {
+    "en_us": {
+      "full": "turn",
+      "abbr": []
+    },
+    "en_uk": {
+      "full": "turn",
+      "abbr": []
+    },
+    "fr": {
+      "full": "tourner",
+      "abbr": []
+    },
+    "de": {
+      "full": "wenden",
+      "abbr": []
+    },
+    "es": {
+      "full": "girar",
+      "abbr": []
+    }
+  },
+  "blo": {
+    "en_us": {
+      "full": "back loop only",
+      "abbr": [
+        "BLO"
+      ]
+    },
+    "en_uk": {
+      "full": "back loop only",
+      "abbr": [
+        "BLO"
+      ]
+    },
+    "fr": {
+      "full": "brin arrière uniquement",
+      "abbr": [
+        "BAV"
+      ]
+    },
+    "de": {
+      "full": "Nur in das hintere Maschenglied",
+      "abbr": []
+    },
+    "es": {
+      "full": "punto trasero",
+      "abbr": [
+        "pt"
+      ]
+    }
+  },
+  "flo": {
+    "en_us": {
+      "full": "front loop only",
+      "abbr": [
+        "FLO"
+      ]
+    },
+    "en_uk": {
+      "full": "front loop only",
+      "abbr": [
+        "FLO"
+      ]
+    },
+    "fr": {
+      "full": "brin avant uniquement",
+      "abbr": [
+        "BAM"
+      ]
+    },
+    "de": {
+      "full": "Nur in das vordere Maschenglied",
+      "abbr": []
+    },
+    "es": {
+      "full": "punto delantero",
+      "abbr": [
+        "pd"
+      ]
+    }
+  },
+  "st": {
+    "en_us": {
+      "full": "stitch",
+      "abbr": [
+        "st"
+      ],
+      "abbr_plural": [
+        "sts"
+      ]
+    },
+    "en_uk": {
+      "full": "stitch",
+      "abbr": [
+        "st"
+      ],
+      "abbr_plural": [
+        "sts"
+      ]
+    },
+    "fr": {
+      "full": "maille",
+      "abbr": [
+        "m"
+      ],
+      "abbr_plural": [
+        "m"
+      ]
+    },
+    "de": {
+      "full": "Masche",
+      "abbr": [
+        "M"
+      ],
+      "abbr_plural": [
+        "M"
+      ]
+    },
+    "es": {
+      "full": "punto",
+      "abbr": [
+        "p"
+      ],
+      "abbr_plural": [
+        "p"
+      ]
+    }
+  }
+}

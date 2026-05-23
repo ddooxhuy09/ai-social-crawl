@@ -101,7 +101,7 @@ def save_product_results(search_key: str, all_items: list, project_id: str = Non
         if _ROOT_DIR not in sys.path:
             sys.path.insert(0, _ROOT_DIR)
             
-        from projects.telegram_notify import _send_telegram_sync
+        from telegram_bot.notify import _send_telegram_sync
         import html
         import json
         from pathlib import Path

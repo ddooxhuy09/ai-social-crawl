@@ -284,7 +284,7 @@ export default function CrawlPage({
       )}
 
       {/* Search forms */}
-      <div className="grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.8fr)] gap-4 p-4 pb-0">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.8fr)] gap-4 p-4 pb-0">
         {/* Crawl keyword form */}
         <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 p-4 bg-gray-50">
           <p className="text-sm font-semibold text-gray-900 mb-3">Crawl theo keyword</p>
@@ -592,7 +592,7 @@ export default function CrawlPage({
                   </div>
 
                   {/* Pin grid */}
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 pb-4">
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 pb-4">
                     {displayPins.map((pin, index) => (
                       <PinCard
                         key={`${pin.source || "pin"}-${pin.pin_url || pin.canonical_pin_id}-${index}`}

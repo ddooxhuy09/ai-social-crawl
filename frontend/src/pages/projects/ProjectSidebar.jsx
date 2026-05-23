@@ -3,7 +3,7 @@ import { Button } from "../../components/ui/button";
 
 export default function ProjectSidebar({ projects, selectedId, onSelect, onDelete, onCreate, loading, loadingProjectId }) {
   return (
-    <div className="w-60 shrink-0 border-r border-gray-200 bg-gray-50 flex flex-col overflow-hidden">
+    <div className="w-full md:w-60 shrink-0 border-r border-gray-200 bg-gray-50 flex flex-col overflow-hidden md:max-w-[240px] max-h-[200px] md:max-h-none">
       <div className="flex items-center justify-between px-3 py-3 border-b border-gray-200">
         <p className="text-sm font-semibold text-gray-900">Projects</p>
         <Button size="xs" variant="default" onClick={onCreate}>+ Tạo mới</Button>
@@ -17,7 +17,7 @@ export default function ProjectSidebar({ projects, selectedId, onSelect, onDelet
           <p className="text-xs text-center">Chưa có project nào.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-1.5 p-2 overflow-y-auto flex-1">
+        <div className="flex flex-row md:flex-col gap-1.5 p-2 overflow-x-auto md:overflow-y-auto flex-1">
           {projects.map(p => {
             const isActive = p.id === selectedId;
             const isLoading = p.id === loadingProjectId;
@@ -25,7 +25,7 @@ export default function ProjectSidebar({ projects, selectedId, onSelect, onDelet
               <div
                 key={p.id}
                 onClick={() => onSelect(p.id)}
-                className={`rounded-lg border px-3 py-2.5 cursor-pointer transition-all group ${
+                className={`rounded-lg border px-3 py-2.5 cursor-pointer transition-all group shrink-0 md:shrink w-44 md:w-auto ${
                   isActive ? "border-sky-400 bg-sky-50 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"
                 }`}
               >

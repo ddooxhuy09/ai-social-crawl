@@ -30,6 +30,7 @@ router = APIRouter()
 
 class CreateListingRequest(BaseModel):
     listing_name: str
+    project_name: str = ""
 
 
 class KeywordProcessRequest(BaseModel):
@@ -103,7 +104,7 @@ async def create_listing(req: CreateListingRequest):
     existing = load_listing_history(listing_name)
     if existing:
         return {"listing_name": listing_name, "created": False}
-    history = build_empty_listing_history(listing_name)
+    history = build_empty_listing_history(listing_name, project_name=req.project_name)
     history = save_listing_history(history)
     return {"listing_name": listing_name, "created": True}
 

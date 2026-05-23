@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useTransition } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { Menu } from "lucide-react";
 import { API_BASE } from "./constants";
 import CrawlPage from "./pages/CrawlPage";
 import HuntPage from "./pages/HuntPage";
@@ -11,6 +12,7 @@ import ProductInsightsPage from "./pages/ProductInsightsPage";
 import UserFavoriteItemsPage from "./pages/UserFavoriteItemsPage";
 import RequirementsPage from "./pages/product-requirements";
 import EtsyListingPage from "./pages/EtsyListingPage";
+import TranslateChartPage from "./pages/translate-chart/TranslateChartPage";
 import AppSidebar from "./components/AppSidebar";
 import QueueModal from "./pages/projects/modals/QueueModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -102,6 +104,7 @@ export default function App() {
 function MainApp({ authUser, setAuthUser, onLogout }) {
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleUpdateUser = (updated) => {
     setAuthUser(updated);
@@ -274,14 +277,15 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
   return (
     <TaskQueueProvider onTaskComplete={handleTaskComplete}>
       <div className="flex h-screen w-screen overflow-hidden bg-gray-100 font-sans">
-        <AppSidebar />
-        <main className="flex flex-col flex-1 overflow-hidden bg-white">
+        <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <main className="flex flex-col flex-1 overflow-hidden bg-white min-w-0">
 
           {/* AppHeader consumes TaskQueueContext for queue badge + QueueModal */}
           <AppHeader
             authUser={authUser}
             onLogout={onLogout}
             onOpenProfile={() => setProfileOpen(true)}
+            onToggleSidebar={() => setSidebarOpen(v => !v)}
           />
 
           {historyLoading && (
@@ -325,6 +329,7 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
               <Route path="/etsy-listing" element={
                 <EtsyListingPage initialListingName={initListingName} onInitConsumed={() => setInitListingName(null)} />
               } />
+              <Route path="/translate-chart" element={<TranslateChartPage />} />
             </Routes>
           </div>
         </main>
@@ -344,7 +349,7 @@ function MainApp({ authUser, setAuthUser, onLogout }) {
 // ── AppHeader — consumes TaskQueueContext ──────────────────────────────────────
 // Renders the top header bar (title, queue badge button, user avatar/logout) and
 // the QueueModal. Isolated here so MainApp never has to touch queue state.
-function AppHeader({ authUser, onLogout, onOpenProfile }) {
+function AppHeader({ authUser, onLogout, onOpenProfile, onToggleSidebar }) {
   const {
     queue,
     isWorkerRunning,
@@ -360,23 +365,32 @@ function AppHeader({ authUser, onLogout, onOpenProfile }) {
 
   return (
     <>
-      <header className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-        <div>
-          <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">Pinterest Crawler</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">Quản lý task tự động và lịch sử crawl đa nền tảng.</p>
+      <header className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 shrink-0 gap-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="md:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors shrink-0"
+          >
+            <Menu size={20} />
+          </button>
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent truncate">Pinterest Crawler</h1>
+            <p className="text-[13px] text-gray-500 mt-0.5 hidden sm:block">Quản lý task tự động và lịch sử crawl đa nền tảng.</p>
+          </div>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center shrink-0">
           <button
             type="button"
             onClick={() => setQueueModalOpen(true)}
-            className={`px-4 py-1.5 rounded-full border text-sm font-semibold transition-all flex items-center gap-2.5 ${
+            className={`px-3 md:px-4 py-1.5 rounded-full border text-sm font-semibold transition-all flex items-center gap-1.5 md:gap-2.5 ${
               isRunning
                 ? "bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-100 animate-pulse"
                 : "bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:bg-gray-50 shadow-sm"
             }`}
           >
-            <span className="text-lg">{isRunning ? "⏳" : "📋"}</span>
-            <span>{isRunning ? "Running..." : "Tasks"}</span>
+            <span className="text-base md:text-lg">{isRunning ? "⏳" : "📋"}</span>
+            <span className="hidden sm:inline">{isRunning ? "Running..." : "Tasks"}</span>
             {queue.length > 0 && (
               <span className={`min-w-[20px] h-5 flex items-center justify-center rounded-full text-[11px] px-1.5 ${
                 isRunning ? "bg-white text-emerald-600" : "bg-gray-100 text-gray-600"
@@ -404,15 +418,16 @@ function AppHeader({ authUser, onLogout, onOpenProfile }) {
                   {(authUser?.email || "?")[0].toUpperCase()}
                 </div>
               )}
-              <span className="text-[12px] text-gray-500 hidden sm:block">{authUser?.email}</span>
+              <span className="text-[12px] text-gray-500 hidden sm:block max-w-[120px] truncate">{authUser?.email}</span>
             </button>
             <button
               type="button"
               onClick={onLogout}
               title="Đăng xuất"
-              className="px-3 py-1.5 rounded-full border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              className="px-2 md:px-3 py-1.5 rounded-full border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
             >
-              Đăng xuất
+              <span className="hidden sm:inline">Đăng xuất</span>
+              <span className="sm:hidden">✕</span>
             </button>
 
             <CookiePopover />

@@ -101,7 +101,7 @@ async def run_task(task: dict):
         t_type = task.get("type") or task.get("page")
         if t_type in ("crawl_keyword", "crawl", "crawl-image", "crawl_image"):
             import projects.db
-            import projects.telegram_notify as tg
+            import telegram_bot.notify as tg
             p_name = "Crawl Page"
             try:
                 project = projects.db._get_project(task.get("projectId"))
@@ -156,7 +156,7 @@ async def run_task(task: dict):
     if task.get("status") == "done":
         try:
             import projects.db
-            import projects.telegram_notify as tg
+            import telegram_bot.notify as tg
             
             t_type = task.get("type") or task.get("page")
             
@@ -196,7 +196,7 @@ async def run_task(task: dict):
     elif task.get("status") == "error":
         try:
             import projects.db
-            import projects.telegram_notify as tg
+            import telegram_bot.notify as tg
             
             p_name = task.get("projectName", task.get("projectId", ""))
             try:

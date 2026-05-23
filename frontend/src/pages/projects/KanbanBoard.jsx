@@ -52,7 +52,7 @@ export default function KanbanBoard({
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col bg-gray-50/30">
-      <div className="flex items-center gap-6 px-8 py-6 border-b border-gray-100 bg-white shrink-0 shadow-sm z-10">
+      <div className="flex items-center gap-4 md:gap-6 px-4 md:px-8 py-4 md:py-6 border-b border-gray-100 bg-white shrink-0 shadow-sm z-10 overflow-x-auto">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-extrabold text-gray-900 truncate tracking-tight">{selected.name}</h2>

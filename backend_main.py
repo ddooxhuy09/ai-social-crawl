@@ -14,12 +14,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from projects.worker import task_worker_loop
+from telegram_bot.bot import start_bot_polling
 
 app = FastAPI(title="Pinterest Crawler API")
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(task_worker_loop())
+    asyncio.create_task(start_bot_polling())
 
 # ── Auth middleware ────────────────────────────────────────────────────────────
 
@@ -99,6 +101,10 @@ app.include_router(etsy_hunt_router)
 # User Favorite Items: /api/user-favorites/*
 from user_favorite_items.router import router as user_favorites_router
 app.include_router(user_favorites_router)
+
+# Translate Chart: /api/translate-chart/*
+from translate_chart.router import router as translate_chart_router
+app.include_router(translate_chart_router)
 
 # Product Insights: /api/product-insights/*
 from product_insights.router import router as product_insights_router

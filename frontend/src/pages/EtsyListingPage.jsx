@@ -62,6 +62,8 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
   const [selectedListing, setSelectedListing] = useState(""); // listing_name
   const [newListingName, setNewListingName] = useState("");
   const [creatingListing, setCreatingListing] = useState(false);
+  const [editingPrice, setEditingPrice] = useState(null);
+  const [editPriceValue, setEditPriceValue] = useState("");
 
   // CSV files for REQ1
   const [csvFiles, setCsvFiles] = useState([]);
@@ -140,6 +142,11 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
   const [req5DragOver, setReq5DragOver] = useState(false);
 
   const [toasts, setToasts] = useState([]);
+  const [draftPrice, setDraftPrice] = useState("");
+  const [draftQuantity, setDraftQuantity] = useState(500);
+  const [draftWhenMade, setDraftWhenMade] = useState("2020_2026");
+  const [draftDigitalFile, setDraftDigitalFile] = useState(null);
+  const digitalFileRef = useRef(null);
 
   const showToast = (message, type = "success") => {
     const id = Date.now() + Math.random();
@@ -189,6 +196,10 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
     replaceAltUploads([]);
     setReq5Result(null);
     setReq5DragOver(false);
+    setDraftPrice("");
+    setDraftQuantity(500);
+    setDraftWhenMade("2020_2026");
+    setDraftDigitalFile(null);
   };
 
   const applyHistoryState = (payload) => {
@@ -235,6 +246,10 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
           }
         : null
     );
+    setDraftPrice(payload.price ?? "");
+    setDraftQuantity(payload.quantity ?? 500);
+    setDraftWhenMade(payload.when_made || "2020_2026");
+    setDraftDigitalFile(payload.digital_file || null);
   };
 
   const refreshListings = () => {
@@ -355,7 +370,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
       fetch(`${API_BASE}/api/listing/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listing_name: initialListingName }),
+        body: JSON.stringify({ listing_name: initialListingName, project_name: projectName }),
       })
         .catch(() => {}) // ignore "already exists" errors
         .finally(() => {
@@ -406,6 +421,66 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
       showToast("Error: " + e.message, "error");
     } finally {
       setCreatingListing(false);
+    }
+  };
+
+  const handleUpdatePrice = async (listingName, price) => {
+    try {
+      await fetch(`${API_BASE}/api/listing/update_draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listing_name: listingName, price }),
+      });
+      refreshListings();
+    } catch (e) {
+      showToast("Error saving price: " + e.message, "error");
+    }
+  };
+
+  const handleSaveDraftField = async (field, value) => {
+    if (!selectedListing) return;
+    try {
+      await fetch(`${API_BASE}/api/listing/update_draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listing_name: selectedListing, [field]: value }),
+      });
+      refreshListings();
+    } catch (e) {
+      showToast("Error saving: " + e.message, "error");
+    }
+  };
+
+  const handleUploadDigitalFile = async (file) => {
+    if (!file || !selectedListing) return;
+    const form = new FormData();
+    form.append("listing_name", selectedListing);
+    form.append("file", file);
+    try {
+      const res = await fetch(`${API_BASE}/api/listing/upload_digital_file?listing_name=${encodeURIComponent(selectedListing)}`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Upload failed");
+      setDraftDigitalFile(data.digital_file || data.req5?.digital_file || null);
+      refreshListings();
+      showToast("Digital file uploaded");
+    } catch (e) {
+      showToast("Error: " + e.message, "error");
+    }
+    if (digitalFileRef.current) digitalFileRef.current.value = "";
+  };
+
+  const handleRemoveDigitalFile = async () => {
+    if (!selectedListing) return;
+    try {
+      await fetch(`${API_BASE}/api/listing/digital_file?listing_name=${encodeURIComponent(selectedListing)}`, { method: "DELETE" });
+      setDraftDigitalFile(null);
+      refreshListings();
+      showToast("Digital file removed");
+    } catch (e) {
+      showToast("Error: " + e.message, "error");
     }
   };
 
@@ -686,14 +761,14 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
     `w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 ${ring} bg-gray-50 focus:bg-white transition-colors resize-none`;
 
   return (
-    <div className="flex h-full overflow-hidden bg-gray-50">
+    <div className="flex flex-col md:flex-row h-full overflow-hidden bg-gray-50">
       <ToastContainer toasts={toasts} />
 
       {/* ── Keyword CSV Detail Modal ── */}
       {huntDetailModalOpen && (
         <div className="fixed inset-0 z-[9998] bg-black/40 flex items-center justify-center p-4"
           onClick={e => { if (e.target === e.currentTarget) setHuntDetailModalOpen(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[900px] max-w-full max-h-[85vh] flex flex-col">
+          <div className="bg-white rounded-2xl shadow-2xl w-[900px] max-w-[95vw] max-h-[85vh] flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-3 min-w-0">
@@ -830,7 +905,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
       {/* ── Left sidebar ── */}
       {embedded ? (
         /* Embedded mode: Keyword Crawl History */
-        <aside className="w-[272px] flex-none border-r border-gray-200 bg-white flex flex-col overflow-hidden">
+        <aside className="w-full md:w-[272px] flex-none border-r border-gray-200 bg-white flex flex-col overflow-hidden md:max-w-[272px] max-h-[200px] md:max-h-none">
           <div className="px-4 py-3 border-b border-gray-100 shrink-0">
             <p className="text-sm font-semibold text-gray-900">🔍 Keyword Crawl</p>
             <p className="text-[11px] text-gray-400 mt-0.5">Crawl keywords with HEnull</p>
@@ -869,7 +944,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
           </div>
 
           {/* CSV file list */}
-          <div className="flex-1 overflow-y-auto flex flex-col">
+          <div className="flex-1 overflow-x-auto md:overflow-y-auto flex flex-row md:flex-col">
             {csvFiles.length === 0 && !huntHistoryLoading && (
               <p className="text-xs text-gray-400 italic px-4 py-3">Chưa có lịch sử. Mở HEnull và search keyword để tạo CSV.</p>
             )}
@@ -877,7 +952,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
               const isSelected = selectedCsvFile === h.filename;
               return (
                 <button key={h.filename} type="button" onClick={() => loadHuntDetail(h.filename)}
-                  className={`flex items-center gap-2 px-4 py-2.5 text-left transition-colors border-b border-gray-50 ${
+                  className={`flex items-center gap-2 px-4 py-2.5 text-left transition-colors border-b border-gray-50 shrink-0 md:shrink ${
                     isSelected
                       ? "bg-sky-50 border-l-2 border-l-sky-500 text-sky-700"
                       : "hover:bg-gray-50 border-l-2 border-l-transparent text-gray-700"
@@ -898,7 +973,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
         </aside>
       ) : (
         /* Normal mode: Listing management */
-        <aside className="w-[272px] flex-none border-r border-gray-200 bg-white flex flex-col overflow-hidden">
+        <aside className="w-full md:w-[272px] flex-none border-r border-gray-200 bg-white flex flex-col overflow-hidden md:max-w-[272px] max-h-[200px] md:max-h-none">
           <div className="px-5 py-4 border-b border-gray-100 shrink-0">
             <p className="text-sm font-semibold text-gray-900">Etsy Listing AI</p>
             <p className="text-[11px] text-gray-400 mt-0.5">Select or create a listing to start</p>
@@ -921,13 +996,13 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
           </div>
 
           {/* Existing listings */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-x-auto md:overflow-y-auto">
             {allListings.length === 0 ? (
               <div className="flex items-center justify-center h-24 px-4">
                 <p className="text-xs text-gray-400 text-center">No listings yet. Create one above.</p>
               </div>
             ) : (
-              <div className="flex flex-col divide-y divide-gray-50">
+              <div className="flex flex-row md:flex-col divide-y divide-gray-50 md:divide-y">
                 <p className="px-4 pt-3 pb-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide shrink-0">
                   Your Listings ({allListings.length})
                 </p>
@@ -936,7 +1011,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                   const doneCount = [listing.has_req1, listing.has_req2, listing.has_req3, listing.has_req4, listing.has_req5].filter(Boolean).length;
                   return (
                     <button key={listing.listing_name} onClick={() => setSelectedListing(listing.listing_name)}
-                      className={`w-full text-left px-4 py-3 transition-colors ${isActive ? "bg-sky-50 border-l-2 border-sky-500" : "hover:bg-gray-50 border-l-2 border-transparent"}`}>
+                      className={`text-left px-4 py-3 transition-colors shrink-0 md:shrink w-40 md:w-auto ${isActive ? "bg-sky-50 border-l-2 border-sky-500" : "hover:bg-gray-50 border-l-2 border-transparent"}`}>
                       <p className={`text-xs font-semibold truncate ${isActive ? "text-sky-700" : "text-gray-800"}`}>{listing.listing_name}</p>
                       {listing.seed_keyword && <p className="text-[10px] text-gray-400 truncate mt-0.5">{listing.seed_keyword}</p>}
                       <div className="flex items-center gap-1 mt-1.5">
@@ -957,17 +1032,137 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
       {/* ── Main content ── */}
       <main className="flex-1 overflow-y-auto">
         {!selectedListing ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <p className="text-base font-semibold text-gray-400">No listing selected</p>
-              <p className="text-sm text-gray-400 mt-1">Create a new listing or select one from the sidebar.</p>
-            </div>
-          </div>
-        ) : (
-          <div className="max-w-2xl mx-auto px-6 py-6 flex flex-col gap-5">
+          !embedded ? (
+            <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 flex flex-col gap-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900">Etsy Listings</h1>
+                  <p className="text-sm text-gray-400 mt-0.5">Click a row to view details and edit</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="New listing name..."
+                    className="w-56 border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-sky-400"
+                    value={newListingName}
+                    onChange={(e) => setNewListingName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleCreateListing()}
+                  />
+                  <Button variant="sky" size="sm" disabled={!newListingName.trim() || creatingListing} onClick={handleCreateListing}>
+                    {creatingListing ? "..." : "+ Create"}
+                  </Button>
+                </div>
+              </div>
 
-            {/* Page title */}
+              {allListings.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
+                  <p className="text-sm text-gray-400">No listings yet. Create one to get started.</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <table className="w-full text-xs border-collapse">
+                    <thead className="sticky top-0 z-10 bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 border-b border-gray-200 text-left font-semibold text-gray-600">Listing Name</th>
+                        <th className="px-3 py-3 border-b border-gray-200 text-left font-semibold text-gray-600">Project</th>
+                        <th className="px-3 py-3 border-b border-gray-200 text-left font-semibold text-gray-600">Progress</th>
+                        <th className="px-3 py-3 border-b border-gray-200 text-left font-semibold text-gray-600 min-w-[160px]">Title</th>
+                        <th className="px-3 py-3 border-b border-gray-200 text-left font-semibold text-gray-600">Price</th>
+                        <th className="px-3 py-3 border-b border-gray-200 text-left font-semibold text-gray-600">Images</th>
+                        <th className="px-3 py-3 border-b border-gray-200 text-left font-semibold text-gray-600">Tags</th>
+                        <th className="px-3 py-3 border-b border-gray-200 text-left font-semibold text-gray-600">Description</th>
+                        <th className="px-3 py-3 border-b border-gray-200 text-right font-semibold text-gray-600">Updated</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allListings.map((listing) => {
+                        const doneCount = [listing.has_req1, listing.has_req2, listing.has_req3, listing.has_req4, listing.has_req5].filter(Boolean).length;
+                        const isEditing = editingPrice === listing.listing_name;
+                        return (
+                          <tr
+                            key={listing.listing_name}
+                            className="hover:bg-sky-50 transition-colors cursor-pointer group"
+                            onClick={() => setSelectedListing(listing.listing_name)}
+                          >
+                            <td className="px-4 py-3 border-b border-gray-100 font-semibold text-gray-800 max-w-[180px]">
+                              <span className="truncate block">{listing.listing_name}</span>
+                            </td>
+                            <td className="px-3 py-3 border-b border-gray-100 text-gray-500 max-w-[120px]">
+                              <span className="truncate block">{listing.project_name || "—"}</span>
+                            </td>
+                            <td className="px-3 py-3 border-b border-gray-100">
+                              <div className="flex items-center gap-1">
+                                {[{ key: "req1", color: "bg-sky-400" }, { key: "req2", color: "bg-indigo-400" }, { key: "req3", color: "bg-emerald-400" }, { key: "req4", color: "bg-amber-400" }, { key: "req5", color: "bg-rose-400" }].map(({ key, color }) => (
+                                  <div key={key} className={`w-2 h-2 rounded-full ${listing[`has_${key}`] ? color : "bg-gray-200"}`} />
+                                ))}
+                                <span className="text-[10px] text-gray-400 ml-1">{doneCount}/5</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 border-b border-gray-100 text-gray-600 max-w-[160px]">
+                              <span className="truncate block">{listing.listing_title || "—"}</span>
+                            </td>
+                            <td className="px-3 py-3 border-b border-gray-100" onClick={(e) => e.stopPropagation()}>
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  className="w-20 border border-sky-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                  value={editPriceValue}
+                                  onChange={(e) => setEditPriceValue(e.target.value)}
+                                  onBlur={() => { handleUpdatePrice(listing.listing_name, editPriceValue); setEditingPrice(null); }}
+                                  onKeyDown={(e) => { if (e.key === "Enter") { handleUpdatePrice(listing.listing_name, editPriceValue); setEditingPrice(null); } if (e.key === "Escape") setEditingPrice(null); }}
+                                />
+                              ) : (
+                                <span
+                                  className="text-gray-700 hover:text-sky-600 hover:underline cursor-pointer"
+                                  onDoubleClick={() => { setEditingPrice(listing.listing_name); setEditPriceValue(listing.price || ""); }}
+                                  title="Double-click to edit"
+                                >
+                                  {listing.price || "—"}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 border-b border-gray-100 text-gray-500">
+                              {listing.image_count ? `${listing.image_count} img` : "—"}
+                            </td>
+                            <td className="px-3 py-3 border-b border-gray-100 text-gray-500">
+                              {listing.tag_count ? `${listing.tag_count}/13` : "—"}
+                            </td>
+                            <td className="px-3 py-3 border-b border-gray-100 text-gray-500 max-w-[140px]">
+                              <span className="truncate block">{listing.description_preview || "—"}</span>
+                            </td>
+                            <td className="px-3 py-3 border-b border-gray-100 text-gray-400 text-right whitespace-nowrap">
+                              {listing.updated_at ? listing.updated_at.slice(5, 16).replace("T", " ") : ""}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <p className="text-base font-semibold text-gray-400">No listing selected</p>
+                <p className="text-sm text-gray-400 mt-1">Create a new listing or select one from the sidebar.</p>
+              </div>
+            </div>
+          )
+        ) : (
+          <div className="max-w-2xl mx-auto px-4 md:px-6 py-6 flex flex-col gap-5">
+
+            {/* Back button + Page title */}
             <div>
+              {!embedded && (
+                <button
+                  onClick={() => setSelectedListing("")}
+                  className="text-xs text-sky-600 hover:text-sky-700 mb-2 flex items-center gap-1"
+                >
+                  ← Back to listings
+                </button>
+              )}
               <h1 className="text-2xl font-bold text-gray-900">
                 {embedded && projectName ? projectName : selectedListing}
               </h1>
@@ -996,10 +1191,10 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
 
             {/* ── REQ1: Keywords ── */}
             <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
                   <StepCircle number={1} done={!!req1Data} colorClass={STEP_COLORS[1]} />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold text-gray-900">REQ1 · Keywords</p>
                     <p className="text-[11px] text-gray-400 mt-0.5">Select a CSV and filter long-tail keywords with Gemini</p>
                   </div>
@@ -1011,7 +1206,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                 )}
               </div>
 
-              <div className="px-6 py-5 flex flex-col gap-4">
+              <div className="px-4 md:px-6 py-5 flex flex-col gap-4">
                 <div className="flex flex-col gap-3">
                   <div>
                     <textarea
@@ -1099,8 +1294,8 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                   <p className="text-sm text-gray-400 font-medium">Run REQ1 first to unlock</p>
                 </div>
               )}
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
                   <StepCircle number={2} done={!!titleResult} colorClass={STEP_COLORS[2]} />
                   <div>
                     <p className="text-sm font-semibold text-gray-900">REQ2 · Generate Listing Titles</p>
@@ -1114,7 +1309,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                 )}
               </div>
 
-              <div className="px-6 py-5 flex flex-col gap-4">
+              <div className="px-4 md:px-6 py-5 flex flex-col gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">Custom Features / Attributes</label>
                   <textarea
@@ -1201,8 +1396,8 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                   <p className="text-sm text-gray-400 font-medium">Run REQ1 first to unlock</p>
                 </div>
               )}
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
                   <StepCircle number={3} done={!!tagResult} colorClass={STEP_COLORS[3]} />
                   <div>
                     <p className="text-sm font-semibold text-gray-900">REQ3 · Generate Tags</p>
@@ -1216,7 +1411,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                 )}
               </div>
 
-              <div className="px-6 py-5 flex flex-col gap-4">
+              <div className="px-4 md:px-6 py-5 flex flex-col gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">Title for tags</label>
                   <textarea
@@ -1283,8 +1478,8 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                   <p className="text-sm text-gray-400 font-medium">Run REQ1 first to unlock</p>
                 </div>
               )}
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
                   <StepCircle number={4} done={!!descriptionResult} colorClass={STEP_COLORS[4]} />
                   <div>
                     <p className="text-sm font-semibold text-gray-900">REQ4 · Generate Description</p>
@@ -1316,7 +1511,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                 </div>
               </div>
 
-              <div className="px-6 py-5 flex flex-col gap-3.5">
+              <div className="px-4 md:px-6 py-5 flex flex-col gap-3.5">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">Title for Description</label>
                   <textarea
@@ -1405,8 +1600,8 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                   <p className="text-sm text-gray-400 font-medium">Run REQ1 first to unlock</p>
                 </div>
               )}
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
                   <StepCircle number={5} done={!!req5Result} colorClass={STEP_COLORS[5]} />
                   <div>
                     <p className="text-sm font-semibold text-gray-900">REQ5 · Image Alt Text</p>
@@ -1420,7 +1615,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                 )}
               </div>
 
-              <div className="px-6 py-5 flex flex-col gap-4">
+              <div className="px-4 md:px-6 py-5 flex flex-col gap-4">
                 <div
                   onClick={() => req5InputRef.current?.click()}
                   onDragOver={(e) => { e.preventDefault(); setReq5DragOver(true); }}
@@ -1514,8 +1709,8 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
 
             {/* ── Final Draft ── */}
             <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${hasFinalDocument ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-400 border border-gray-200"}`}>
                     {hasFinalDocument ? "✓" : "6"}
                   </div>
@@ -1555,7 +1750,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                 )}
               </div>
 
-              <div className="px-6 py-5">
+              <div className="px-4 md:px-6 py-5">
                 {hasFinalDocument ? (
                   <div className="flex flex-col gap-3">
                     {finalSections.map((section) => {
@@ -1584,6 +1779,100 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                     <p className="text-sm text-gray-400">Run REQ2 → REQ3 → REQ4 → REQ5 to build the final listing draft here.</p>
                   </div>
                 )}
+              </div>
+            </section>
+
+            {/* ── Publish Settings ── */}
+            <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-violet-500 text-white">
+                  ⚙
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Publish Settings</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Price, quantity, and digital file for Save as Draft</p>
+                </div>
+              </div>
+
+              <div className="px-4 md:px-6 py-5 flex flex-col gap-4">
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Price <span style={{ color: "#aaa", fontWeight: 400 }}>(VND)</span></label>
+                    <input
+                      type="number"
+                      className={inputCls("focus:ring-violet-400")}
+                      placeholder="100000"
+                      min="0"
+                      value={draftPrice}
+                      onChange={(e) => setDraftPrice(e.target.value)}
+                      onBlur={() => handleSaveDraftField("price", draftPrice)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleSaveDraftField("price", draftPrice); }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Quantity</label>
+                    <input
+                      type="number"
+                      className={inputCls("focus:ring-violet-400")}
+                      placeholder="500"
+                      min="1"
+                      value={draftQuantity}
+                      onChange={(e) => setDraftQuantity(e.target.value)}
+                      onBlur={() => handleSaveDraftField("quantity", draftQuantity)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleSaveDraftField("quantity", draftQuantity); }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">When Made</label>
+                  <select
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 bg-gray-50 focus:bg-white transition-colors"
+                    value={draftWhenMade}
+                    onChange={(e) => { setDraftWhenMade(e.target.value); handleSaveDraftField("when_made", e.target.value); }}
+                  >
+                    <option value="2020_2026">2020 – 2026</option>
+                    <option value="2010_2019">2010 – 2019</option>
+                    <option value="2000_2009">2000 – 2009</option>
+                    <option value="before_2000">Before 2000</option>
+                    <option value="1990s">1990s</option>
+                    <option value="1980s">1980s</option>
+                    <option value="1970s">1970s</option>
+                    <option value="1960s">1960s</option>
+                    <option value="1950s">1950s</option>
+                    <option value="before_1950">Before 1950</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">Digital File</label>
+                  {draftDigitalFile ? (
+                    <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2">
+                      <span className="text-sm">📦</span>
+                      <span className="text-xs font-medium text-violet-700 flex-1 truncate">{draftDigitalFile.original_filename}</span>
+                      <button
+                        className="text-xs text-gray-400 hover:text-red-500"
+                        onClick={handleRemoveDigitalFile}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => digitalFileRef.current?.click()}
+                      className="rounded-xl border-2 border-dashed border-gray-200 hover:border-violet-300 hover:bg-violet-50/30 p-4 text-center cursor-pointer transition-colors"
+                    >
+                      <input
+                        ref={digitalFileRef}
+                        type="file"
+                        className="hidden"
+                        onChange={(e) => handleUploadDigitalFile(e.target.files?.[0])}
+                      />
+                      <p className="text-xs font-medium text-gray-500">Drop or click to upload digital file</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">PNG, ZIP, PDF…</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </section>
 
