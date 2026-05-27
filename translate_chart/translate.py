@@ -154,7 +154,6 @@ def _build_prompt(
     lang: str,
     all_terms: list[dict],
     raw_abbr_map: dict[str, str],
-    bilingual: bool = False,
 ) -> str:
     lang_name = SUPPORTED_LANGS[lang]
 
@@ -165,23 +164,6 @@ def _build_prompt(
     )
 
     abbr_codes = ", ".join(raw_abbr_map.keys()) if raw_abbr_map else "none"
-
-    bilingual_rules = (
-        "\n## BILINGUAL FORMAT\n"
-        "Produce a bilingual document where every line of content appears TWICE:\n"
-        "  1. The original English line, exactly as-is.\n"
-        "  2. Immediately below it, the translation wrapped in italics (*...*).\n"
-        "Apply this to ALL content: headings, list items, table cells, plain paragraphs.\n"
-        "Keep the same Markdown prefix on the translated line (# for headings, - for list items, etc.).\n"
-        "Do NOT add extra blank lines. Keep all blank lines exactly as in the original.\n\n"
-        "Example:\n"
-        "# Pattern Name\n"
-        "# *Nom du Patron*\n\n"
-        "- ch: chain stitch\n"
-        "- *ch: maille en l'air*\n\n"
-        "Row 1: ch 10, sc in 2nd ch from hook.\n"
-        "*Rang 1 : ml 10, ms dans la 2e ml depuis le crochet.*\n"
-    ) if bilingual else ""
 
     return (
         f"You are a professional translator specializing in crochet patterns.\n"
@@ -196,8 +178,7 @@ def _build_prompt(
         f"({abbr_codes}) must remain EXACTLY as written. Translate only the description on the right.\n"
         f"4. Translate naturally — the output should read as a native {lang_name} crochet pattern.\n"
         f"5. Before returning, silently check every term in MANDATORY TERMINOLOGY and fix any violations.\n"
-        f"6. Return ONLY the translated document. No commentary, no preamble, no code fences.\n"
-        f"{bilingual_rules}\n"
+        f"6. Return ONLY the translated document. No commentary, no preamble, no code fences.\n\n"
         f"## DOCUMENT TO TRANSLATE\n"
         f"{source}"
     )
@@ -221,6 +202,105 @@ def _build_review_prompt(original: str, translated: str, lang: str) -> str:
         f"## ORIGINAL\n{original}\n\n"
         f"## TRANSLATION TO REVIEW\n{translated}"
     )
+
+
+# ── Bilingual merge (Python-side, deterministic) ──────────────────────────────
+
+# display:block forces each span onto its own line (span is inline by default)
+_TRANS_STYLE = "font-size:1.05em;display:block;"
+_ORIG_STYLE  = "color:#16a34a;font-size:0.875em;display:block;"
+_MD_PREFIX   = re.compile(r"^(#{1,6} |- |\* |\d+\. |> |\| )")
+# Code fences (``` / ~~~) are DROPPED in bilingual mode — wrapping their content
+# in <span> tags causes Markdown to render the spans as raw text inside a code block.
+# Dropping the fence lets the content render as normal bilingual HTML.
+_FENCE  = re.compile(r"^(`{3,}|~{3,})\s*(\S.*)?$")
+# Horizontal rules pass through unchanged (structural separators, safe to keep).
+_HLINE  = re.compile(r"^(-{3,}|\*{3,}|_{3,})\s*$")
+
+
+def _wrap(line: str, style: str) -> str:
+    """Wrap a line's content in a block-display span, keeping Markdown prefix outside."""
+    m = _MD_PREFIX.match(line)
+    if m:
+        prefix, content = m.group(0), line[m.end():]
+        return f'{prefix}<span style="{style}">{content}</span>'
+    return f'<span style="{style}">{line}</span>'
+
+
+def _merge_bilingual(source: str, translated: str) -> str:
+    """
+    Deterministically interleave translated and source lines with HTML spans.
+    - Splits both texts into paragraphs (blank-line separated).
+    - Within each paragraph, pairs translation lines with source lines.
+    - Translated line on top (larger font), source line below (green).
+    - Code fences (```) are DROPPED so their content renders as bilingual HTML,
+      not as raw text inside a code block.
+    - Horizontal rules (---) pass through unchanged.
+    - All HTML generated here — Gemini never touches spans.
+    """
+    def split_blocks(text: str) -> list[str]:
+        return re.split(r"\n{2,}", text.strip())
+
+    src_blocks = split_blocks(source)
+    tr_blocks  = split_blocks(translated)
+
+    n = max(len(src_blocks), len(tr_blocks))
+    src_blocks += [""] * (n - len(src_blocks))
+    tr_blocks  += [""] * (n - len(tr_blocks))
+
+    result: list[str] = []
+    for tr_block, src_block in zip(tr_blocks, src_blocks):
+        if not tr_block.strip():
+            result.append("")
+            continue
+
+        tr_lines  = tr_block.splitlines()
+        src_lines = src_block.splitlines() if src_block else []
+        src_i     = 0  # track source index independently
+
+        merged: list[str] = []
+        for tr_line in tr_lines:
+            stripped = tr_line.strip()
+
+            # Blank line — preserve, advance source past its blank lines too
+            if not stripped:
+                merged.append("")
+                while src_i < len(src_lines) and not src_lines[src_i].strip():
+                    src_i += 1
+                continue
+
+            # Code fence — drop it; content will render as bilingual HTML, not raw code
+            if _FENCE.match(stripped):
+                if src_i < len(src_lines) and _FENCE.match(src_lines[src_i].strip()):
+                    src_i += 1  # skip matching source fence
+                continue
+
+            # Horizontal rule — pass through unchanged
+            if _HLINE.match(stripped):
+                merged.append(tr_line)
+                if src_i < len(src_lines) and _HLINE.match(src_lines[src_i].strip()):
+                    src_i += 1
+                continue
+
+            # Regular content — wrap translation, then paired source line
+            merged.append(_wrap(tr_line, _TRANS_STYLE))
+            if src_i < len(src_lines):
+                src_line = src_lines[src_i]
+                if src_line.strip() and not _FENCE.match(src_line.strip()):
+                    merged.append(_wrap(src_line, _ORIG_STYLE))
+                src_i += 1
+
+        # Any leftover source lines (translation merged multiple src lines into one)
+        remaining = [
+            src_lines[j] for j in range(src_i, len(src_lines))
+            if src_lines[j].strip() and not _FENCE.match(src_lines[j].strip())
+        ]
+        if remaining:
+            merged.append(_wrap(" ".join(remaining), _ORIG_STYLE))
+
+        result.append("\n".join(merged))
+
+    return "\n\n".join(result)
 
 
 def _build_fix_prompt(translated: str, violations: list[dict], lang: str) -> str:
@@ -251,6 +331,8 @@ def _call_gemini(prompt: str) -> str:
     text = response.text.strip()
     text = re.sub(r"^```(?:markdown)?\s*\n?", "", text)
     text = re.sub(r"\n?```\s*$", "", text).strip()
+    # Fix Gemini occasionally writing font-size= instead of font-size:
+    text = text.replace("font-size=", "font-size:")
     if not text:
         raise ValueError("Gemini returned an empty response")
     return text
@@ -293,8 +375,8 @@ def translate_one(text: str, lang: str, terminology: dict, bilingual: bool = Fal
         lang, len(abbr_terms), len(body_terms), len(all_terms), bilingual,
     )
 
-    # First translation pass
-    prompt = _build_prompt(text, lang, all_terms, raw_abbr_map, bilingual=bilingual)
+    # First translation pass (always clean — no HTML, no bilingual formatting)
+    prompt = _build_prompt(text, lang, all_terms, raw_abbr_map)
     translated = _call_gemini(prompt)
 
     # Validate
@@ -318,6 +400,11 @@ def translate_one(text: str, lang: str, terminology: dict, bilingual: bool = Fal
 
     log.info("[translate:%s] running final review pass", lang)
     review_prompt = _build_review_prompt(text, translated, lang)
-    translated = _call_gemini(review_prompt)
+    reviewed = _call_gemini(review_prompt)
 
-    return translated
+    # Bilingual merge done in Python — 100% consistent, no Gemini HTML quirks
+    if bilingual:
+        log.info("[translate:%s] merging bilingual output (python-side)", lang)
+        return _merge_bilingual(text, reviewed)
+
+    return reviewed

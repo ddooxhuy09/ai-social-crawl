@@ -44,6 +44,14 @@ class UpdateDraftRequest(BaseModel):
     when_made: str | None = None
 
 
+class SaveFinalDraftRequest(BaseModel):
+    listing_name: str
+    title: str | None = None
+    description: str | None = None
+    tags: str | None = None
+    alt_texts: str | None = None
+
+
 @router.post("/api/listing/update_draft", tags=["Listings"])
 async def update_listing_draft(req: UpdateDraftRequest):
     listing_name = ensure_listing_name(req.listing_name)
@@ -56,6 +64,24 @@ async def update_listing_draft(req: UpdateDraftRequest):
         history["quantity"] = req.quantity
     if req.when_made is not None:
         history["when_made"] = req.when_made
+    history = save_listing_history(history)
+    return build_listing_history_response(history)
+
+
+@router.post("/api/listing/save_final_draft", tags=["Listings"])
+async def save_final_draft(req: SaveFinalDraftRequest):
+    listing_name = ensure_listing_name(req.listing_name)
+    history = load_listing_history(listing_name)
+    if not history:
+        raise Exception(f"Listing '{listing_name}' not found")
+
+    draft = dict(history.get("final_draft") or {})
+    for field in ("title", "description", "tags", "alt_texts"):
+        val = getattr(req, field)
+        if val is not None:
+            # Empty string means "reset override" — store None so AI value takes over
+            draft[field] = val if val.strip() else None
+    history["final_draft"] = draft if any(v for v in draft.values()) else None
     history = save_listing_history(history)
     return build_listing_history_response(history)
 

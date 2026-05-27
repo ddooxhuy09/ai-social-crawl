@@ -141,6 +141,11 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
   const [req5Result, setReq5Result] = useState(null);
   const [req5DragOver, setReq5DragOver] = useState(false);
 
+  const [finalDraft, setFinalDraft] = useState({ title: null, description: null, tags: null, alt_texts: null });
+  const [editingFinalSection, setEditingFinalSection] = useState(null);
+  const [finalDraftEditValue, setFinalDraftEditValue] = useState("");
+  const [savingFinalDraft, setSavingFinalDraft] = useState(false);
+
   const [toasts, setToasts] = useState([]);
   const [draftPrice, setDraftPrice] = useState("");
   const [draftQuantity, setDraftQuantity] = useState(500);
@@ -200,6 +205,8 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
     setDraftQuantity(500);
     setDraftWhenMade("2020_2026");
     setDraftDigitalFile(null);
+    setFinalDraft({ title: null, description: null, tags: null, alt_texts: null });
+    setEditingFinalSection(null);
   };
 
   const applyHistoryState = (payload) => {
@@ -250,6 +257,9 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
     setDraftQuantity(payload.quantity ?? 500);
     setDraftWhenMade(payload.when_made || "2020_2026");
     setDraftDigitalFile(payload.digital_file || null);
+    const fd = payload.final_draft || {};
+    setFinalDraft({ title: fd.title || null, description: fd.description || null, tags: fd.tags || null, alt_texts: fd.alt_texts || null });
+    setEditingFinalSection(null);
   };
 
   const refreshListings = () => {
@@ -701,6 +711,33 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
     }
   };
 
+  // Map section key → finalDraft field name
+  const DRAFT_KEY_MAP = { title: "title", description: "description", tags: "tags", image_alt_text: "alt_texts" };
+
+  const handleSaveFinalDraft = async (sectionKey, value) => {
+    if (!selectedListing) return;
+    const field = DRAFT_KEY_MAP[sectionKey];
+    if (!field) return;
+    setSavingFinalDraft(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/listing/save_final_draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listing_name: selectedListing, [field]: value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Error saving");
+      const fd = data.final_draft || {};
+      setFinalDraft({ title: fd.title || null, description: fd.description || null, tags: fd.tags || null, alt_texts: fd.alt_texts || null });
+      setEditingFinalSection(null);
+      showToast("✅ Saved!");
+    } catch (e) {
+      showToast("Error: " + e.message, "error");
+    } finally {
+      setSavingFinalDraft(false);
+    }
+  };
+
   const getSortedData = () => {
     if (!req1Data?.data) return [];
     return req1Data.data
@@ -722,10 +759,10 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
     (item, i) => `${i + 1}. ${item.original_filename || item.stored_filename}:\nFile Name: ${item.file_name}\nAlt Text: ${item.alt_text}`
   );
   const finalSections = [
-    { key: "title", label: "Title", value: finalListingTitle },
-    { key: "description", label: "Description", value: descriptionResult?.description_text || "" },
-    { key: "tags", label: "Tags", value: finalListingTags.join(", ") },
-    { key: "image_alt_text", label: "Image Alt Texts", value: finalAltLines.join("\n\n") },
+    { key: "title", label: "Title", value: finalDraft.title || finalListingTitle, aiValue: finalListingTitle },
+    { key: "description", label: "Description", value: finalDraft.description || descriptionResult?.description_text || "", aiValue: descriptionResult?.description_text || "" },
+    { key: "tags", label: "Tags", value: finalDraft.tags || finalListingTags.join(", "), aiValue: finalListingTags.join(", ") },
+    { key: "image_alt_text", label: "Image Alt Texts", value: finalDraft.alt_texts || finalAltLines.join("\n\n"), aiValue: finalAltLines.join("\n\n") },
   ];
   const completedCount = finalSections.filter((s) => s.value.trim()).length;
   const finalDocumentText = finalSections
@@ -1009,11 +1046,15 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                 {allListings.map((listing) => {
                   const isActive = selectedListing === listing.listing_name;
                   const doneCount = [listing.has_req1, listing.has_req2, listing.has_req3, listing.has_req4, listing.has_req5].filter(Boolean).length;
+                  const displayName = listing.project_name || listing.listing_title || listing.listing_name;
+                  const subLabel = listing.project_name
+                    ? (listing.listing_title || listing.seed_keyword || "")
+                    : (listing.seed_keyword || "");
                   return (
                     <button key={listing.listing_name} onClick={() => setSelectedListing(listing.listing_name)}
                       className={`text-left px-4 py-3 transition-colors shrink-0 md:shrink w-40 md:w-auto ${isActive ? "bg-sky-50 border-l-2 border-sky-500" : "hover:bg-gray-50 border-l-2 border-transparent"}`}>
-                      <p className={`text-xs font-semibold truncate ${isActive ? "text-sky-700" : "text-gray-800"}`}>{listing.listing_name}</p>
-                      {listing.seed_keyword && <p className="text-[10px] text-gray-400 truncate mt-0.5">{listing.seed_keyword}</p>}
+                      <p className={`text-xs font-semibold truncate ${isActive ? "text-sky-700" : "text-gray-800"}`}>{displayName}</p>
+                      {subLabel && <p className="text-[10px] text-gray-400 truncate mt-0.5">{subLabel}</p>}
                       <div className="flex items-center gap-1 mt-1.5">
                         {[{ key: "req1", color: "bg-sky-400" }, { key: "req2", color: "bg-indigo-400" }, { key: "req3", color: "bg-emerald-400" }, { key: "req4", color: "bg-amber-400" }, { key: "req5", color: "bg-rose-400" }].map(({ key, color }) => (
                           <div key={key} className={`w-2 h-2 rounded-full ${listing[`has_${key}`] ? color : "bg-gray-200"}`} />
@@ -1063,7 +1104,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                   <table className="w-full text-xs border-collapse">
                     <thead className="sticky top-0 z-10 bg-gray-50">
                       <tr>
-                        <th className="px-4 py-3 border-b border-gray-200 text-left font-semibold text-gray-600">Listing Name</th>
+                        <th className="px-4 py-3 border-b border-gray-200 text-left font-semibold text-gray-600">Name</th>
                         <th className="px-3 py-3 border-b border-gray-200 text-left font-semibold text-gray-600">Project</th>
                         <th className="px-3 py-3 border-b border-gray-200 text-left font-semibold text-gray-600">Progress</th>
                         <th className="px-3 py-3 border-b border-gray-200 text-left font-semibold text-gray-600 min-w-[160px]">Title</th>
@@ -1078,6 +1119,7 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                       {allListings.map((listing) => {
                         const doneCount = [listing.has_req1, listing.has_req2, listing.has_req3, listing.has_req4, listing.has_req5].filter(Boolean).length;
                         const isEditing = editingPrice === listing.listing_name;
+                        const tableDisplayName = listing.project_name || listing.listing_title || listing.listing_name;
                         return (
                           <tr
                             key={listing.listing_name}
@@ -1085,7 +1127,10 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                             onClick={() => setSelectedListing(listing.listing_name)}
                           >
                             <td className="px-4 py-3 border-b border-gray-100 font-semibold text-gray-800 max-w-[180px]">
-                              <span className="truncate block">{listing.listing_name}</span>
+                              <span className="truncate block">{tableDisplayName}</span>
+                              {listing.project_name && listing.listing_name !== listing.project_name && (
+                                <span className="text-[10px] text-gray-400 truncate block font-normal">{listing.listing_name}</span>
+                              )}
                             </td>
                             <td className="px-3 py-3 border-b border-gray-100 text-gray-500 max-w-[120px]">
                               <span className="truncate block">{listing.project_name || "—"}</span>
@@ -1755,16 +1800,76 @@ export default function EtsyListingPage({ initialListingName, onInitConsumed, em
                   <div className="flex flex-col gap-3">
                     {finalSections.map((section) => {
                       const isReady = section.value.trim().length > 0;
+                      const isEditing = editingFinalSection === section.key;
+                      const draftField = DRAFT_KEY_MAP[section.key];
+                      const isOverridden = !!(finalDraft[draftField]);
                       return (
                         <div key={section.key} className="border border-gray-100 rounded-xl overflow-hidden">
-                          <div className={`px-4 py-2.5 flex items-center justify-between ${isReady ? "bg-gray-50" : "bg-amber-50/40"}`}>
-                            <span className="text-xs font-semibold text-gray-700">{section.label}</span>
-                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${isReady ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-amber-50 text-amber-600 border-amber-200"}`}>
-                              {isReady ? "Ready" : "Missing"}
-                            </span>
+                          <div className={`px-4 py-2.5 flex items-center justify-between gap-2 ${isReady ? "bg-gray-50" : "bg-amber-50/40"}`}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-xs font-semibold text-gray-700">{section.label}</span>
+                              {isOverridden && (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-200 shrink-0">✏ Edited</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${isReady ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-amber-50 text-amber-600 border-amber-200"}`}>
+                                {isReady ? "Ready" : "Missing"}
+                              </span>
+                              {!isEditing && (
+                                <button
+                                  className="text-[11px] font-medium text-gray-400 hover:text-sky-600 transition-colors"
+                                  onClick={() => { setEditingFinalSection(section.key); setFinalDraftEditValue(section.value); }}
+                                >
+                                  Edit
+                                </button>
+                              )}
+                              {!isEditing && isReady && (
+                                <button
+                                  className="text-[11px] font-medium text-gray-400 hover:text-gray-600 transition-colors"
+                                  onClick={() => copyText(section.value, `${section.label} copied`)}
+                                >
+                                  Copy
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <div className="px-4 py-3">
-                            {isReady ? (
+                            {isEditing ? (
+                              <div className="flex flex-col gap-2">
+                                <textarea
+                                  autoFocus
+                                  className="w-full border border-sky-300 rounded-lg px-3 py-2.5 text-sm font-sans leading-6 focus:outline-none focus:ring-2 focus:ring-sky-400 resize-y bg-white"
+                                  style={{ minHeight: section.key === "title" ? 64 : 200 }}
+                                  value={finalDraftEditValue}
+                                  onChange={(e) => setFinalDraftEditValue(e.target.value)}
+                                />
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    disabled={savingFinalDraft}
+                                    className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-xs font-semibold disabled:opacity-50 transition-colors"
+                                    onClick={() => handleSaveFinalDraft(section.key, finalDraftEditValue)}
+                                  >
+                                    {savingFinalDraft ? "Saving..." : "Save"}
+                                  </button>
+                                  <button
+                                    className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition-colors"
+                                    onClick={() => setEditingFinalSection(null)}
+                                  >
+                                    Cancel
+                                  </button>
+                                  {isOverridden && (
+                                    <button
+                                      disabled={savingFinalDraft}
+                                      className="px-3 py-1.5 text-xs text-red-400 hover:text-red-600 disabled:opacity-50 transition-colors"
+                                      onClick={() => handleSaveFinalDraft(section.key, "")}
+                                    >
+                                      Reset to AI
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ) : isReady ? (
                               <pre className="whitespace-pre-wrap text-sm leading-6 text-gray-800 font-sans">{section.value}</pre>
                             ) : (
                               <p className="text-xs text-gray-400">Complete the upstream step to fill this section.</p>

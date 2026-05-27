@@ -99,6 +99,7 @@ def build_empty_listing_history(listing_name: str, source_filename: str = "", se
         "quantity": 500,
         "when_made": "2020_2026",
         "digital_file": None,
+        "final_draft": None,
         "req1": None,
         "req2": None,
         "req3": None,
@@ -132,6 +133,7 @@ def _normalize_listing_history(
     base["quantity"] = base.get("quantity", 500)
     base["when_made"] = base.get("when_made", "2020_2026")
     base["digital_file"] = base.get("digital_file") or None
+    base["final_draft"] = base.get("final_draft") or None
     base["created_at"] = base.get("created_at") or now_iso()
     base["updated_at"] = base.get("updated_at") or base["created_at"]
     for key in ("req1", "req2", "req3", "req4", "req5"):
